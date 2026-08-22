@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Sender {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  isVip        Boolean  @default(false)
+  vipReason    String?
+  organization String?
+  createdAt    DateTime @default(now())
+
+  emails Email[]
+}
+
+enum EmailStatus {
+  UNCLASSIFIED
+  CLASSIFIED
+  ARCHIVED
+}
+
+model Email {
+  id            String      @id @default(cuid())
+  senderId      String
+  sender        Sender      @relation(fields: [senderId], references: [id])
+  threadId      String
+  subject       String
+  rawBody       String
+  receivedAt    DateTime
+  status        EmailStatus @default(UNCLASSIFIED)
+  priorityScore Float       @default(0)
+  isUrgent      Boolean     @default(false)
+  classifiedAt  DateTime?
+  createdAt     DateTime    @default(now())
+
+  commitments Commitment[]
+  drafts      Draft[]
+
+  @@index([status])
+  @@index([threadId])
+}
+
+enum CommitmentStatus {
+  PENDING
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum CommitmentConfidence {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Commitment {
+  id             String                @id @default(cuid())
+  emailId        String
+  email          Email                 @relation(fields: [emailId], references: [id])
+  description    String
+  dueAt          DateTime?
+  confidence     CommitmentConfidence  @default(MEDIUM)
+  sourceExcerpt  String
+  status         CommitmentStatus      @default(PENDING)
+  detectedByAI   Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+
+  calendarEvent  CalendarEvent?
+  whatsAppNotifications WhatsAppNotification[]
+
+  @@index([dueAt])
+  @@index([status])
+}
+
+enum DraftStatus {
+  PENDING_REVIEW
+  APPROVED
+  DISCARDED
+}
+
+model Draft {
+  id           String      @id @default(cuid())
+  emailId      String
+  email        Email       @relation(fields: [emailId], references: [id])
+  content      String
+  tone         String?
+  status       DraftStatus @default(PENDING_REVIEW)
+  modelUsed    String
+  generatedAt  DateTime    @default(now())
+  approvedAt   DateTime?
+}
+
+enum AuditActionType {
+  CLASSIFY
+  DETECT_COMMITMENT
+  MARK_URGENT
+  CREATE_CALENDAR_EVENT
+  SEND_WHATSAPP_NOTIFICATION
+  GENERATE_DRAFT
+  APPROVE_DRAFT
+  TOGGLE_EXTRA
+  REVERT
+}
+
+enum AuditPerformer {
+  SYSTEM
+  USER
+}
+
+model AuditLogEntry {
+  id            String          @id @default(cuid())
+  actionType    AuditActionType
+  entityType    String
+  entityId      String
+  payloadBefore String?
+  payloadAfter  String?
+  performedBy   AuditPerformer  @default(SYSTEM)
+  reversible    Boolean         @default(true)
+  revertedAt    DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model ExtraConfig {
+  id                   String  @id @default(cuid())
+  calendarEnabled      Boolean @default(false)
+  whatsappEnabled      Boolean @default(false)
+  autoDraftToneEnabled Boolean @default(false)
+  vipSlaEnabled        Boolean @default(false)
+  analyticsEnabled     Boolean @default(false)
+  updatedAt            DateTime @updatedAt
+}
+
+model CalendarEvent {
+  id              String     @id @default(cuid())
+  commitmentId    String     @unique
+  commitment      Commitment @relation(fields: [commitmentId], references: [id])
+  title           String
+  start           DateTime
+  provider        String
+  auditLogEntryId String
+  createdAt       DateTime   @default(now())
+}
+
+model WhatsAppNotification {
+  id           String     @id @default(cuid())
+  commitmentId String
+  commitment   Commitment @relation(fields: [commitmentId], references: [id])
+  message      String
+  sentAt       DateTime   @default(now())
+}
+
+model ServiceLevelHistory {
+  id             String   @id @default(cuid())
+  level          Int
+  backlogCount   Int
+  recordedAt     DateTime @default(now())
+}
