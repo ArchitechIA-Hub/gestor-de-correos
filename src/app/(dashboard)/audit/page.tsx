@@ -19,7 +19,7 @@ const ACTION_LABELS: Record<string, string> = {
   EDIT_DRAFT: "Borrador editado",
   APPROVE_DRAFT: "Borrador aprobado/descartado",
   TOGGLE_EXTRA: "Extra activado/desactivado",
-  SEND_DIGEST: "Digest enviado",
+  SEND_DIGEST: "Informe enviado",
   REVERT: "Reversión",
   MARK_MARKETING: "Marcado como marketing",
   MANAGE_MAIL_ACCOUNT: "Cuenta de correo gestionada",

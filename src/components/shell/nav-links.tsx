@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 
 const BASE_LINKS = [
   { href: "/inbox", label: "Bandeja" },
-  { href: "/digest", label: "Digest" },
+  { href: "/digest", label: "Informe" },
   { href: "/audit", label: "Auditoría" },
   { href: "/settings/accounts", label: "Cuentas" },
   { href: "/settings/extras", label: "Extras" },
@@ -15,7 +15,7 @@ const BASE_LINKS = [
 export function NavLinks({ rescueModeEnabled }: { rescueModeEnabled: boolean }) {
   const pathname = usePathname();
   const links = rescueModeEnabled
-    ? [...BASE_LINKS.slice(0, 1), { href: "/rescue", label: "Rescate" }, ...BASE_LINKS.slice(1)]
+    ? [...BASE_LINKS.slice(0, 1), { href: "/rescue", label: "Prioridades" }, ...BASE_LINKS.slice(1)]
     : BASE_LINKS;
 
   return (

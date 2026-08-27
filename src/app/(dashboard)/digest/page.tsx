@@ -72,7 +72,7 @@ export default async function DigestPage({
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="font-heading text-2xl text-foreground">Digest de {CURRENT_USER_NAME}</h1>
+        <h1 className="font-heading text-2xl text-foreground">Informe de {CURRENT_USER_NAME}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {formatDate(rangeStart)} — {formatDate(rangeEnd)}
         </p>

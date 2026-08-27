@@ -51,7 +51,7 @@ export function SendDigestControl({
         );
         setOpen(false);
       } catch {
-        setError("No se pudo enviar el digest. Configura un destinatario válido primero.");
+        setError("No se pudo enviar el informe. Configura un destinatario válido primero.");
         setOpen(false);
       }
     });
@@ -61,7 +61,7 @@ export function SendDigestControl({
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
-      <p className="text-xs font-medium text-muted-foreground">Enviar este digest por correo</p>
+      <p className="text-xs font-medium text-muted-foreground">Enviar este informe por correo</p>
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="email"
@@ -78,11 +78,11 @@ export function SendDigestControl({
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger render={<Button size="sm" disabled={!savedRecipient || recipientDirty || isPending} />}>
-            Enviar digest
+            Enviar informe
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>¿Enviar este digest?</DialogTitle>
+              <DialogTitle>¿Enviar este informe?</DialogTitle>
               <DialogDescription>
                 Se enviará a <strong>{savedRecipient}</strong>. Nota: este prototipo no tiene un proveedor de
                 correo real conectado — el envío queda registrado en el log de auditoría, no se despacha un

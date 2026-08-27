@@ -17,7 +17,7 @@ export default async function RescuePage() {
   if (!features.rescueMode) {
     return (
       <div className="flex flex-col gap-2">
-        <h1 className="font-heading text-2xl text-foreground">Modo rescate</h1>
+        <h1 className="font-heading text-2xl text-foreground">Prioridades</h1>
         <p className="text-sm text-muted-foreground">
           No disponible en tu nivel de servicio actual. Se activa en Nivel 4 — Crítico.
         </p>
@@ -31,7 +31,7 @@ export default async function RescuePage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="font-heading text-2xl text-foreground">Modo rescate</h1>
+        <h1 className="font-heading text-2xl text-foreground">Prioridades</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Plan de choque: los {commitments.length} compromisos más urgentes ahora mismo, por urgencia real +
           importancia del remitente.

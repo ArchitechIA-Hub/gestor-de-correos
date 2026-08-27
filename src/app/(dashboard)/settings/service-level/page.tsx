@@ -23,7 +23,7 @@ export default async function ServiceLevelPage() {
         </p>
         {FEATURES_UNLOCKED_FOR_ALL_LEVELS && (
           <p className="mt-2 max-w-2xl text-sm text-vip">
-            Nota: mientras se valida el producto, borradores, alertas push y modo rescate están activos en
+            Nota: mientras se valida el producto, borradores, alertas push y la vista de prioridades están activos en
             todos los niveles (decisión temporal — el escalonamiento por nivel puede reactivarse más adelante).
           </p>
         )}
@@ -54,7 +54,7 @@ export default async function ServiceLevelPage() {
                   Alertas push de urgencia
                 </li>
                 <li className={def.features.rescueMode ? "text-foreground" : "text-muted-foreground/50"}>
-                  Modo rescate (10 más urgentes)
+                  Prioridades (10 compromisos más urgentes)
                 </li>
               </ul>
             </div>

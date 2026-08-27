@@ -19,7 +19,7 @@ El nivel de servicio **no es una elección del usuario**: se recalcula automáti
 | 1 — Ligero | Hasta 200 | Cada 6 horas | — |
 | 2 — Moderado | 201–800 | Cada 2 horas | Borradores de respuesta |
 | 3 — Alto | 801–2,500 | Cada 30 minutos | + Alertas push de compromisos urgentes |
-| 4 — Crítico | Más de 2,500 | Cada 15 minutos | + Modo "rescate": plan de choque con los 10 compromisos más urgentes |
+| 4 — Crítico | Más de 2,500 | Cada 15 minutos | + Modo "rescate": plan de choque con los 10 compromisos más urgentes (etiqueta visible en la UI: **«Prioridades»**) |
 
 Cada nivel es superset del anterior (moderado incluye lo de ligero, alto incluye lo de moderado, etc.).
 
@@ -27,8 +27,14 @@ Cada nivel es superset del anterior (moderado incluye lo de ligero, alto incluye
 
 1. **Detección de compromisos y fechas límite** en el contenido de los correos (texto libre del hilo, no solo campos estructurados).
 2. **Clasificación y priorización automática** por urgencia real + importancia del remitente — nunca por orden cronológico simple.
-3. **Resumen periódico (digest)** diario o semanal — ver formato exacto más abajo.
+3. **Resumen periódico (digest)** diario o semanal — ver formato exacto más abajo. Etiqueta visible en la UI: **«Informe»**.
 4. **Generación de borradores de respuesta** según el contexto del hilo (disponible desde el Nivel 2 en adelante).
+
+## Terminología: especificación vs. UI
+
+Esta especificación usa los términos internos "digest" y "modo rescate" para nombrar los conceptos. En la interfaz visible para el cliente esas pestañas se llaman **«Informe»** y **«Prioridades»** respectivamente (decisión de producto: vocabulario de usuario final, no de la spec). Los identificadores de código no cambian: rutas `/digest` y `/rescue`, acción de auditoría `SEND_DIGEST`, feature flag `rescueMode`, campo `digestRecipientEmail`, etc. Al añadir texto visible nuevo, usar "Informe"/"Prioridades"; al tocar rutas, logs o esquema, mantener los identificadores originales.
+
+Las tres vistas agregadas —Informe, Prioridades, Auditoría— muestran siempre información de todos los correos, nunca de uno solo (la vista de un correo individual es `/inbox/[id]`).
 
 ## Extras opcionales (activables por el usuario)
 
