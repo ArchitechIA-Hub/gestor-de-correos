@@ -10,6 +10,17 @@ datasource db {
   provider = "sqlite"
 }
 
+model MailAccount {
+  id           String   @id @default(cuid())
+  emailAddress String   @unique
+  label        String
+  provider     String   @default("mock")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  emails Email[]
+}
+
 model Sender {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -29,24 +40,32 @@ enum EmailStatus {
 }
 
 model Email {
-  id            String      @id @default(cuid())
-  senderId      String
-  sender        Sender      @relation(fields: [senderId], references: [id])
-  threadId      String
-  subject       String
-  rawBody       String
-  receivedAt    DateTime
-  status        EmailStatus @default(UNCLASSIFIED)
-  priorityScore Float       @default(0)
-  isUrgent      Boolean     @default(false)
-  classifiedAt  DateTime?
-  createdAt     DateTime    @default(now())
+  id              String      @id @default(cuid())
+  senderId        String
+  sender          Sender      @relation(fields: [senderId], references: [id])
+  mailAccountId   String
+  mailAccount     MailAccount @relation(fields: [mailAccountId], references: [id])
+  threadId        String
+  subject         String
+  rawBody         String
+  receivedAt      DateTime
+  status          EmailStatus @default(UNCLASSIFIED)
+  priorityScore   Float       @default(0)
+  isUrgent        Boolean     @default(false)
+  isMarketing     Boolean     @default(false)
+  marketingReason String?
+  classifiedAt    DateTime?
+  readAt          DateTime?
+  respondedAt     DateTime?
+  createdAt       DateTime    @default(now())
 
   commitments Commitment[]
   drafts      Draft[]
+  urgentAlerts UrgentAlert[]
 
   @@index([status])
   @@index([threadId])
+  @@index([mailAccountId])
 }
 
 enum CommitmentStatus {
@@ -76,6 +95,7 @@ model Commitment {
 
   calendarEvent  CalendarEvent?
   whatsAppNotifications WhatsAppNotification[]
+  urgentAlerts   UrgentAlert[]
 
   @@index([dueAt])
   @@index([status])
@@ -87,15 +107,22 @@ enum DraftStatus {
   DISCARDED
 }
 
+enum DraftResponseType {
+  AFFIRMATIVE
+  NEGATIVE
+  INTERMEDIATE
+}
+
 model Draft {
-  id           String      @id @default(cuid())
+  id           String             @id @default(cuid())
   emailId      String
-  email        Email       @relation(fields: [emailId], references: [id])
+  email        Email              @relation(fields: [emailId], references: [id])
   content      String
   tone         String?
-  status       DraftStatus @default(PENDING_REVIEW)
+  responseType DraftResponseType?
+  status       DraftStatus        @default(PENDING_REVIEW)
   modelUsed    String
-  generatedAt  DateTime    @default(now())
+  generatedAt  DateTime           @default(now())
   approvedAt   DateTime?
 }
 
@@ -106,9 +133,15 @@ enum AuditActionType {
   CREATE_CALENDAR_EVENT
   SEND_WHATSAPP_NOTIFICATION
   GENERATE_DRAFT
+  EDIT_DRAFT
   APPROVE_DRAFT
   TOGGLE_EXTRA
+  SEND_DIGEST
   REVERT
+  MARK_MARKETING
+  MANAGE_MAIL_ACCOUNT
+  UPDATE_COMMITMENT_STATUS
+  CREATE_URGENT_ALERT
 }
 
 enum AuditPerformer {
@@ -159,6 +192,34 @@ model WhatsAppNotification {
   commitment   Commitment @relation(fields: [commitmentId], references: [id])
   message      String
   sentAt       DateTime   @default(now())
+}
+
+/**
+ * Alerta push in-app (centro de notificaciones). Se crea siempre que un
+ * compromiso queda urgente (<48h), sin importar el nivel de servicio activo
+ * ni el gating por feature de la tabla de niveles — así lo exige el
+ * invariante de CLAUDE.md ("dispara notificación inmediata... incluso en
+ * Nivel 1").
+ */
+model UrgentAlert {
+  id           String      @id @default(cuid())
+  emailId      String
+  email        Email       @relation(fields: [emailId], references: [id])
+  commitmentId String?
+  commitment   Commitment? @relation(fields: [commitmentId], references: [id])
+  message      String
+  dueAt        DateTime?
+  createdAt    DateTime    @default(now())
+  readAt       DateTime?
+
+  @@index([readAt])
+  @@index([emailId])
+}
+
+model AppSettings {
+  id                  String   @id @default(cuid())
+  digestRecipientEmail String?
+  updatedAt           DateTime @updatedAt
 }
 
 model ServiceLevelHistory {

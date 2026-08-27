@@ -4,9 +4,10 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { generateDraft as generateDraftText } from "@/lib/ai/generate-draft";
 import { recordAuditEvent } from "@/lib/audit/record";
-import { CLAUDE_MODEL } from "@/lib/ai/client";
+import { OPENAI_MODEL } from "@/lib/ai/client";
+import type { DraftResponseType } from "@/generated/prisma/enums";
 
-export async function generateDraftForEmail(emailId: string) {
+export async function generateDraftForEmail(emailId: string, responseType: DraftResponseType) {
   const email = await prisma.email.findUniqueOrThrow({
     where: { id: emailId },
     include: { sender: true, commitments: true },
@@ -20,14 +21,16 @@ export async function generateDraftForEmail(emailId: string) {
     body: email.rawBody,
     commitmentDescriptions: email.commitments.map((c) => c.description),
     tone: config?.autoDraftToneEnabled ? "cordial, ejecutivo, directo, sin rodeos" : undefined,
+    responseType,
   });
 
   const draft = await prisma.draft.create({
     data: {
       emailId: email.id,
       content,
+      responseType,
       status: "PENDING_REVIEW",
-      modelUsed: CLAUDE_MODEL,
+      modelUsed: OPENAI_MODEL,
     },
   });
 
@@ -35,7 +38,7 @@ export async function generateDraftForEmail(emailId: string) {
     actionType: "GENERATE_DRAFT",
     entityType: "Draft",
     entityId: draft.id,
-    payloadAfter: { emailId: email.id, status: "PENDING_REVIEW" },
+    payloadAfter: { emailId: email.id, status: "PENDING_REVIEW", responseType },
   });
 
   revalidatePath(`/inbox/${emailId}`);

@@ -25,15 +25,12 @@ describe("getServiceLevel", () => {
     expect(getServiceLevel(1_000_000).level).toBe(4);
   });
 
-  it("cada nivel es superset del anterior (features acumulativos)", () => {
-    const l1 = getServiceLevel(50).features;
-    const l2 = getServiceLevel(500).features;
-    const l3 = getServiceLevel(1000).features;
-    const l4 = getServiceLevel(5000).features;
+  it("borradores, alertas y modo rescate están activos en todos los niveles (decisión temporal 2026-08-21, ver constants.ts)", () => {
+    const allOn = { draftGeneration: true, urgentPushAlerts: true, rescueMode: true };
 
-    expect(l1).toEqual({ draftGeneration: false, urgentPushAlerts: false, rescueMode: false });
-    expect(l2).toEqual({ draftGeneration: true, urgentPushAlerts: false, rescueMode: false });
-    expect(l3).toEqual({ draftGeneration: true, urgentPushAlerts: true, rescueMode: false });
-    expect(l4).toEqual({ draftGeneration: true, urgentPushAlerts: true, rescueMode: true });
+    expect(getServiceLevel(50).features).toEqual(allOn);
+    expect(getServiceLevel(500).features).toEqual(allOn);
+    expect(getServiceLevel(1000).features).toEqual(allOn);
+    expect(getServiceLevel(5000).features).toEqual(allOn);
   });
 });

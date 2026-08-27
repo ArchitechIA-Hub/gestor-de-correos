@@ -18,12 +18,24 @@ export const metadata: Metadata = {
   description: "Gestor de correo con IA: prioriza compromisos por urgencia real, no por orden cronológico.",
 };
 
+const THEME_INIT_SCRIPT = `
+try {
+  var theme = localStorage.getItem("theme");
+  var dark = theme ? theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.documentElement.classList.toggle("dark", dark);
+} catch (e) {}
+`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es"
+      suppressHydrationWarning
       className={`${fraunces.variable} ${instrumentSans.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

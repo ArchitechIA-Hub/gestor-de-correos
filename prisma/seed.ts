@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/db/prisma";
 import { MOCK_SENDERS } from "../src/lib/mock/senders";
+import { MOCK_ACCOUNTS } from "../src/lib/mock/accounts";
 import { generateMockEmails } from "../src/lib/mock/generate-emails";
 import { computePriorityScore, isUrgentByDeadline } from "../src/lib/priority/engine";
 
@@ -30,6 +31,17 @@ async function main() {
     senderRecords.set(sender.email, record.id);
   }
 
+  console.log("Sembrando cuentas de correo...");
+  const accountRecords = new Map<string, string>(); // emailAddress -> id
+  for (const account of MOCK_ACCOUNTS) {
+    const record = await prisma.mailAccount.upsert({
+      where: { emailAddress: account.emailAddress },
+      update: {},
+      create: { emailAddress: account.emailAddress, label: account.label },
+    });
+    accountRecords.set(account.emailAddress, record.id);
+  }
+
   console.log("Configuración de extras por defecto...");
   await prisma.extraConfig.deleteMany();
   await prisma.extraConfig.create({ data: {} });
@@ -39,40 +51,74 @@ async function main() {
 
   let urgentCasesSeeded = 0;
 
+  let marketingCasesSeeded = 0;
+
   for (let i = 0; i < generated.length; i++) {
     const item = generated[i];
     const senderId = senderRecords.get(item.sender.email)!;
+    const mailAccountId = accountRecords.get(item.account.emailAddress)!;
     const isUnclassified = i < UNCLASSIFIED_COUNT;
+    const isMarketing = !isUnclassified && item.category === "MARKETING";
 
     const nearestDueAt = item.commitments
       .map((c) => c.dueAt)
       .filter((d): d is Date => d !== null)
       .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
-    const priorityScore = isUnclassified
-      ? 0
-      : computePriorityScore(
-          { id: item.threadId, receivedAt: item.receivedAt, isVip: item.sender.isVip, nearestDueAt },
-          NOW
-        );
-    const isUrgent = isUnclassified ? false : isUrgentByDeadline(nearestDueAt, NOW);
+    const priorityScore =
+      isUnclassified || isMarketing
+        ? 0
+        : computePriorityScore(
+            { id: item.threadId, receivedAt: item.receivedAt, isVip: item.sender.isVip, nearestDueAt },
+            NOW
+          );
+    const isUrgent = isUnclassified || isMarketing ? false : isUrgentByDeadline(nearestDueAt, NOW);
     if (isUrgent) urgentCasesSeeded++;
+    if (isMarketing) marketingCasesSeeded++;
 
     const email = await prisma.email.create({
       data: {
         senderId,
+        mailAccountId,
         threadId: item.threadId,
         subject: item.subject,
         rawBody: item.body,
         receivedAt: item.receivedAt,
-        status: isUnclassified ? "UNCLASSIFIED" : "CLASSIFIED",
+        status: isUnclassified ? "UNCLASSIFIED" : isMarketing ? "ARCHIVED" : "CLASSIFIED",
         priorityScore,
         isUrgent,
+        isMarketing,
+        marketingReason: isMarketing ? "Contenido promocional/newsletter, sin acción requerida" : null,
         classifiedAt: isUnclassified ? null : NOW,
       },
     });
 
-    if (!isUnclassified) {
+    if (isMarketing) {
+      const before = JSON.stringify({ status: "UNCLASSIFIED", isMarketing: false });
+      const after = JSON.stringify({ status: "ARCHIVED", isMarketing: true });
+      await prisma.auditLogEntry.create({
+        data: {
+          actionType: "CLASSIFY",
+          entityType: "Email",
+          entityId: email.id,
+          payloadBefore: before,
+          payloadAfter: after,
+          performedBy: "SYSTEM",
+          reversible: true,
+        },
+      });
+      await prisma.auditLogEntry.create({
+        data: {
+          actionType: "MARK_MARKETING",
+          entityType: "Email",
+          entityId: email.id,
+          payloadBefore: before,
+          payloadAfter: after,
+          performedBy: "SYSTEM",
+          reversible: true,
+        },
+      });
+    } else if (!isUnclassified) {
       await prisma.auditLogEntry.create({
         data: {
           actionType: "CLASSIFY",
@@ -126,7 +172,9 @@ async function main() {
     }
   }
 
-  console.log(`Listo. Backlog sin clasificar: ${UNCLASSIFIED_COUNT}. Casos urgentes (<48h) sembrados: ${urgentCasesSeeded}.`);
+  console.log(
+    `Listo. Backlog sin clasificar: ${UNCLASSIFIED_COUNT}. Casos urgentes (<48h) sembrados: ${urgentCasesSeeded}. Marketing ignorado sembrado: ${marketingCasesSeeded}.`
+  );
 }
 
 main()

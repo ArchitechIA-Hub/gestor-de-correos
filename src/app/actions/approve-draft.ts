@@ -12,11 +12,22 @@ import { recordAuditEvent } from "@/lib/audit/record";
  */
 export async function approveDraft(draftId: string) {
   const draft = await prisma.draft.findUniqueOrThrow({ where: { id: draftId } });
+  const respondedAt = new Date();
 
-  const updated = await prisma.draft.update({
-    where: { id: draftId },
-    data: { status: "APPROVED", approvedAt: new Date() },
-  });
+  const [updated] = await prisma.$transaction([
+    prisma.draft.update({
+      where: { id: draftId },
+      data: { status: "APPROVED", approvedAt: respondedAt },
+    }),
+    // Aprobar un borrador es la única acción del prototipo que representa
+    // "ya se le respondió a este correo" — sin esto, el correo se quedaba
+    // viéndose como pendiente para siempre aunque ya tuviera una respuesta
+    // aprobada (afectaba /inbox, el digest y el SLA de VIP).
+    prisma.email.update({
+      where: { id: draft.emailId },
+      data: { respondedAt },
+    }),
+  ]);
 
   await recordAuditEvent({
     actionType: "APPROVE_DRAFT",
@@ -29,6 +40,7 @@ export async function approveDraft(draftId: string) {
   });
 
   revalidatePath(`/inbox/${updated.emailId}`);
+  revalidatePath("/inbox");
   revalidatePath("/audit");
 
   return updated;

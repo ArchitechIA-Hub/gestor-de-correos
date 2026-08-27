@@ -5,6 +5,10 @@ import { prisma } from "@/lib/db/prisma";
 import { extractCommitments } from "@/lib/ai/extract-commitments";
 import { computePriorityScore, isUrgentByDeadline } from "@/lib/priority/engine";
 import { recordAuditEvent } from "@/lib/audit/record";
+import { createUrgentAlert } from "@/lib/alerts";
+import { createCalendarEvent } from "@/lib/calendar";
+import { sendWhatsAppNotification } from "@/lib/whatsapp";
+import { getExtraConfig } from "@/lib/extras";
 
 const SCAN_BATCH_SIZE = 8;
 
@@ -12,6 +16,7 @@ export type ScanResult = {
   scanned: number;
   commitmentsDetected: number;
   urgentDetected: number;
+  marketingDetected: number;
 };
 
 /**
@@ -21,6 +26,7 @@ export type ScanResult = {
  */
 export async function scan(): Promise<ScanResult> {
   const now = new Date();
+  const extraConfig = await getExtraConfig();
 
   const unclassified = await prisma.email.findMany({
     where: { status: "UNCLASSIFIED" },
@@ -31,6 +37,7 @@ export async function scan(): Promise<ScanResult> {
 
   let commitmentsDetected = 0;
   let urgentDetected = 0;
+  let marketingDetected = 0;
 
   for (const email of unclassified) {
     const extraction = await extractCommitments({
@@ -38,6 +45,36 @@ export async function scan(): Promise<ScanResult> {
       body: email.rawBody,
       receivedAt: email.receivedAt,
     });
+
+    if (extraction.isMarketing) {
+      marketingDetected++;
+
+      const before = { status: email.status, priorityScore: email.priorityScore, isUrgent: email.isUrgent, isMarketing: email.isMarketing };
+      const after = { status: "ARCHIVED" as const, isMarketing: true, marketingReason: extraction.marketingReason };
+
+      await prisma.email.update({
+        where: { id: email.id },
+        data: { ...after, classifiedAt: now },
+      });
+
+      await recordAuditEvent({
+        actionType: "CLASSIFY",
+        entityType: "Email",
+        entityId: email.id,
+        payloadBefore: before,
+        payloadAfter: after,
+      });
+
+      await recordAuditEvent({
+        actionType: "MARK_MARKETING",
+        entityType: "Email",
+        entityId: email.id,
+        payloadBefore: before,
+        payloadAfter: after,
+      });
+
+      continue;
+    }
 
     const createdCommitments = [];
     for (const c of extraction.commitments) {
@@ -60,14 +97,18 @@ export async function scan(): Promise<ScanResult> {
         entityId: created.id,
         payloadAfter: c,
       });
+
+      if (extraConfig.calendarEnabled && created.dueAt) {
+        await createCalendarEvent({ commitmentId: created.id, title: created.description, start: created.dueAt });
+      }
     }
     commitmentsDetected += createdCommitments.length;
 
-    const nearestDueAt =
+    const nearestCommitment =
       createdCommitments
-        .map((c) => c.dueAt)
-        .filter((d): d is Date => d !== null)
-        .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+        .filter((c) => c.dueAt !== null)
+        .sort((a, b) => a.dueAt!.getTime() - b.dueAt!.getTime())[0] ?? null;
+    const nearestDueAt = nearestCommitment?.dueAt ?? null;
 
     const priorityScore = computePriorityScore(
       { id: email.id, receivedAt: email.receivedAt, isVip: email.sender.isVip, nearestDueAt },
@@ -99,13 +140,29 @@ export async function scan(): Promise<ScanResult> {
         payloadBefore: { isUrgent: before.isUrgent },
         payloadAfter: { isUrgent: true, reason: "vencimiento <48h" },
       });
+
+      await createUrgentAlert({
+        emailId: email.id,
+        subject: email.subject,
+        senderName: email.sender.name,
+        commitmentId: nearestCommitment?.id,
+        dueAt: nearestDueAt,
+      });
+
+      if (extraConfig.whatsappEnabled && nearestCommitment) {
+        await sendWhatsAppNotification({
+          commitmentId: nearestCommitment.id,
+          message: `${email.sender.name}: "${email.subject}" vence en menos de 48h`,
+        });
+      }
     }
   }
 
+  revalidatePath("/", "layout");
   revalidatePath("/inbox");
   revalidatePath("/digest");
   revalidatePath("/audit");
   revalidatePath("/settings/service-level");
 
-  return { scanned: unclassified.length, commitmentsDetected, urgentDetected };
+  return { scanned: unclassified.length, commitmentsDetected, urgentDetected, marketingDetected };
 }

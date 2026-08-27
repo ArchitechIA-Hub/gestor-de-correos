@@ -2,6 +2,10 @@ import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { getExtraConfig, countActiveExtras, shouldConsolidatePanel } from "@/lib/extras";
 import { getAnalyticsSnapshot } from "@/lib/analytics/metrics";
+import { getUpcomingCalendarEvents } from "@/lib/calendar";
+import { getRecentWhatsAppNotifications } from "@/lib/whatsapp";
+import { computeVipSlaStatus } from "@/lib/priority/sla";
+import { VIP_SLA_HOURS } from "@/lib/priority/constants";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -30,18 +34,22 @@ export default async function PanelPage() {
     );
   }
 
-  const [urgentEmails, vipUnanswered, analytics] = await Promise.all([
+  const [urgentEmails, vipUnanswered, analytics, calendarEvents, whatsappNotifications] = await Promise.all([
     prisma.email.findMany({
       where: { isUrgent: true, status: "CLASSIFIED" },
       include: { sender: true, commitments: { orderBy: { dueAt: "asc" }, take: 1 } },
       orderBy: { priorityScore: "desc" },
       take: 10,
     }),
-    prisma.sender.findMany({
-      where: { isVip: true, emails: { some: { drafts: { none: { status: "APPROVED" } } } } },
+    prisma.email.findMany({
+      where: { sender: { isVip: true }, status: { not: "ARCHIVED" }, respondedAt: null },
+      include: { sender: true },
+      orderBy: { receivedAt: "asc" },
       take: 10,
     }),
     config.analyticsEnabled ? getAnalyticsSnapshot() : Promise.resolve(null),
+    config.calendarEnabled ? getUpcomingCalendarEvents() : Promise.resolve(null),
+    config.whatsappEnabled ? getRecentWhatsAppNotifications() : Promise.resolve(null),
   ]);
 
   return (
@@ -76,33 +84,76 @@ export default async function PanelPage() {
       </section>
 
       <section>
-        <h2 className="font-heading text-lg text-foreground">VIP sin respuesta (SLA)</h2>
+        <h2 className="font-heading text-lg text-foreground">VIP sin respuesta{config.vipSlaEnabled ? " (SLA)" : ""}</h2>
+        {config.vipSlaEnabled && vipUnanswered.length > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ventana de SLA: {VIP_SLA_HOURS}h sin respuesta aprobada ·{" "}
+            {vipUnanswered.filter((email) => computeVipSlaStatus({ isVip: true, receivedAt: email.receivedAt, hasApprovedResponse: false }) === "breached").length}{" "}
+            de {vipUnanswered.length} incumplidos
+          </p>
+        )}
         <ul className="mt-3 flex flex-col gap-2">
-          {vipUnanswered.map((sender) => (
-            <li key={sender.id} className="rounded-lg border border-border bg-card p-3 text-sm">
-              <span className="font-medium text-foreground">{sender.name}</span>
-              {sender.organization && <span className="text-muted-foreground"> · {sender.organization}</span>}
-            </li>
-          ))}
+          {vipUnanswered.map((email) => {
+            const slaStatus = config.vipSlaEnabled
+              ? computeVipSlaStatus({ isVip: true, receivedAt: email.receivedAt, hasApprovedResponse: false })
+              : null;
+            return (
+              <li key={email.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-3 text-sm">
+                <div>
+                  <span className="font-medium text-foreground">{email.sender.name}</span>
+                  {email.sender.organization && <span className="text-muted-foreground"> · {email.sender.organization}</span>}
+                  <p className="mt-1 text-xs text-muted-foreground">{email.subject}</p>
+                </div>
+                {slaStatus === "breached" && <Badge className="bg-urgent text-urgent-foreground">SLA incumplido</Badge>}
+                {slaStatus === "compliant" && <Badge variant="secondary">Dentro de SLA</Badge>}
+              </li>
+            );
+          })}
           {vipUnanswered.length === 0 && <p className="text-sm text-muted-foreground">Sin pendientes VIP.</p>}
         </ul>
       </section>
 
-      {config.calendarEnabled && (
+      {calendarEvents && (
         <section>
           <h2 className="font-heading text-lg text-foreground">Calendario</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Integración activada — los eventos creados a partir de compromisos aparecerán consolidados aquí.
-          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {calendarEvents.map((event) => (
+              <li key={event.id} className="rounded-lg border border-border bg-card p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-foreground">{event.title}</span>
+                  <span className="text-xs text-muted-foreground">{formatDate(event.start)}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {event.commitment.email.sender.name} · {event.commitment.email.subject}
+                </p>
+              </li>
+            ))}
+            {calendarEvents.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sin eventos próximos.</p>
+            )}
+          </ul>
         </section>
       )}
 
-      {config.whatsappEnabled && (
+      {whatsappNotifications && (
         <section>
           <h2 className="font-heading text-lg text-foreground">WhatsApp</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Integración activada — las notificaciones de correos críticos aparecerán consolidadas aquí.
-          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {whatsappNotifications.map((notification) => (
+              <li key={notification.id} className="rounded-lg border border-border bg-card p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-foreground">{notification.message}</span>
+                  <span className="text-xs text-muted-foreground">{formatDate(notification.sentAt)}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {notification.commitment.email.sender.name} · {notification.commitment.email.subject}
+                </p>
+              </li>
+            ))}
+            {whatsappNotifications.length === 0 && (
+              <p className="text-sm text-muted-foreground">Sin notificaciones enviadas.</p>
+            )}
+          </ul>
         </section>
       )}
 

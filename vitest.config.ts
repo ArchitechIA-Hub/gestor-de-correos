@@ -9,5 +9,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    globalSetup: "./vitest.global-setup.ts",
+    env: {
+      // Aísla los tests de integración (scan.test.ts) de la base de datos de
+      // desarrollo — nunca deben tocar dev.db.
+      DATABASE_URL: "file:./prisma/test.db",
+    },
   },
 });

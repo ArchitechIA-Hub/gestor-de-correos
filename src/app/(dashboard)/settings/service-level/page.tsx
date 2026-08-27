@@ -1,4 +1,8 @@
-import { SERVICE_LEVEL_DEFINITIONS, URGENT_THRESHOLD_HOURS } from "@/lib/priority/constants";
+import {
+  SERVICE_LEVEL_DEFINITIONS,
+  URGENT_THRESHOLD_HOURS,
+  FEATURES_UNLOCKED_FOR_ALL_LEVELS,
+} from "@/lib/priority/constants";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { Badge } from "@/components/ui/badge";
 import { DevBacklogControls } from "@/components/settings/dev-backlog-controls";
@@ -17,6 +21,12 @@ export default async function ServiceLevelPage() {
           clasificar ({current.backlogCount} en este momento). Un compromiso con vencimiento en menos de{" "}
           {URGENT_THRESHOLD_HOURS}h siempre dispara urgencia inmediata, sin importar el nivel activo.
         </p>
+        {FEATURES_UNLOCKED_FOR_ALL_LEVELS && (
+          <p className="mt-2 max-w-2xl text-sm text-vip">
+            Nota: mientras se valida el producto, borradores, alertas push y modo rescate están activos en
+            todos los niveles (decisión temporal — el escalonamiento por nivel puede reactivarse más adelante).
+          </p>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

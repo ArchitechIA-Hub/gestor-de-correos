@@ -20,6 +20,7 @@ export async function devSeedBacklog(count: number) {
   const uniquePrefix = `dev-${Date.now()}`;
 
   const senderCache = new Map<string, string>();
+  const accountCache = new Map<string, string>();
 
   for (const item of generated) {
     let senderId = senderCache.get(item.sender.email);
@@ -39,9 +40,24 @@ export async function devSeedBacklog(count: number) {
       senderCache.set(item.sender.email, senderId);
     }
 
+    let mailAccountId = accountCache.get(item.account.emailAddress);
+    if (!mailAccountId) {
+      const account = await prisma.mailAccount.upsert({
+        where: { emailAddress: item.account.emailAddress },
+        update: {},
+        create: {
+          emailAddress: item.account.emailAddress,
+          label: item.account.label,
+        },
+      });
+      mailAccountId = account.id;
+      accountCache.set(item.account.emailAddress, mailAccountId);
+    }
+
     await prisma.email.create({
       data: {
         senderId,
+        mailAccountId,
         threadId: `${uniquePrefix}-${item.threadId}`,
         subject: item.subject,
         rawBody: item.body,

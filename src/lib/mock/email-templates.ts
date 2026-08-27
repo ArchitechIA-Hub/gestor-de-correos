@@ -17,7 +17,8 @@ export type TemplateCategory =
   | "THIS_WEEK"
   | "NEXT_MONTH"
   | "NO_COMMITMENT"
-  | "MULTIPLE";
+  | "MULTIPLE"
+  | "MARKETING";
 
 function hoursFrom(now: Date, hours: number): Date {
   return new Date(now.getTime() + hours * 60 * 60 * 1000);
@@ -107,6 +108,12 @@ export function buildEmailBody(category: TemplateCategory, senderName: string, n
           },
         ],
       };
+    case "MARKETING":
+      return {
+        subject: "🎉 Últimos días: 30% en tu próxima compra",
+        body: `¡Hola!\n\nNo te pierdas nuestra oferta de temporada: 30% de descuento en todo el catálogo solo hasta fin de mes. Miles de clientes ya aprovecharon esta promoción.\n\nSuscríbete a nuestro boletín para recibir más ofertas como esta.\n\nSi no quieres seguir recibiendo estos correos, puedes darte de baja aquí.\n\nSaludos,\nEquipo de ${senderName}`,
+        commitments: [],
+      };
     case "NO_COMMITMENT":
     default:
       return {
@@ -128,4 +135,5 @@ export const ALL_CATEGORIES: TemplateCategory[] = [
   "NEXT_MONTH",
   "NO_COMMITMENT",
   "MULTIPLE",
+  "MARKETING",
 ];

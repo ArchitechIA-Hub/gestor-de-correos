@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CURRENT_USER_NAME } from "@/lib/config";
 import { cn } from "@/lib/utils";
+import { getAppSettings } from "@/lib/settings";
+import { SendDigestControl } from "@/components/digest/send-digest-control";
 
 function formatDate(d: Date) {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
@@ -39,7 +41,7 @@ export default async function DigestPage({
   const rangeEnd = new Date();
 
   const emails = await prisma.email.findMany({
-    where: { receivedAt: { gte: rangeStart, lte: rangeEnd } },
+    where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false },
     include: {
       sender: true,
       commitments: { orderBy: { dueAt: "asc" }, take: 1 },
@@ -48,7 +50,7 @@ export default async function DigestPage({
     orderBy: [{ priorityScore: "desc" }, { receivedAt: "desc" }],
   });
 
-  const [activeCommitments, overdueCommitments, vipSendersUnanswered] = await Promise.all([
+  const [activeCommitments, overdueCommitments, vipSendersUnanswered, appSettings] = await Promise.all([
     prisma.commitment.count({ where: { status: "PENDING" } }),
     prisma.commitment.count({ where: { status: "OVERDUE" } }),
     prisma.sender.findMany({
@@ -64,6 +66,7 @@ export default async function DigestPage({
         },
       },
     }),
+    getAppSettings(),
   ]);
 
   return (
@@ -88,6 +91,11 @@ export default async function DigestPage({
           </Link>
         </div>
       </div>
+
+      <SendDigestControl
+        range={isWeekly ? "weekly" : "daily"}
+        initialRecipient={appSettings.digestRecipientEmail}
+      />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -175,7 +183,7 @@ export default async function DigestPage({
           <p className="mt-2 text-sm text-muted-foreground">Todos los remitentes VIP tienen respuesta aprobada.</p>
         ) : (
           <ul className="mt-3 flex flex-col gap-2">
-            {vipSendersUnanswered.map((sender) => (
+            {vipSendersUnanswered.map((sender: (typeof vipSendersUnanswered)[number]) => (
               <li key={sender.id} className="flex items-center justify-between rounded-lg border border-border bg-card p-3">
                 <div>
                   <div className="flex items-center gap-2">

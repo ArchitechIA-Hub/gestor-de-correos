@@ -4,19 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "/inbox", label: "Bandeja" },
   { href: "/digest", label: "Digest" },
   { href: "/audit", label: "Auditoría" },
+  { href: "/settings/accounts", label: "Cuentas" },
   { href: "/settings/extras", label: "Extras" },
 ];
 
-export function NavLinks() {
+export function NavLinks({ rescueModeEnabled }: { rescueModeEnabled: boolean }) {
   const pathname = usePathname();
+  const links = rescueModeEnabled
+    ? [...BASE_LINKS.slice(0, 1), { href: "/rescue", label: "Rescate" }, ...BASE_LINKS.slice(1)]
+    : BASE_LINKS;
 
   return (
     <nav className="flex items-center gap-1">
-      {LINKS.map((link) => {
+      {links.map((link) => {
         const active = pathname.startsWith(link.href);
         return (
           <Link

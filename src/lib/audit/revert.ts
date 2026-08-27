@@ -17,9 +17,16 @@ export async function revertAuditEvent(auditLogEntryId: string) {
 
   switch (entry.actionType) {
     case "CLASSIFY":
-    case "MARK_URGENT": {
+    case "MARK_URGENT":
+    case "MARK_MARKETING": {
       if (before) {
         await prisma.email.update({ where: { id: entry.entityId }, data: before });
+      }
+      break;
+    }
+    case "MANAGE_MAIL_ACCOUNT": {
+      if (before) {
+        await prisma.mailAccount.update({ where: { id: entry.entityId }, data: before });
       }
       break;
     }
@@ -31,8 +38,22 @@ export async function revertAuditEvent(auditLogEntryId: string) {
       await prisma.calendarEvent.deleteMany({ where: { auditLogEntryId: entry.id } });
       break;
     }
+    case "CREATE_URGENT_ALERT": {
+      await prisma.urgentAlert.deleteMany({ where: { id: entry.entityId } });
+      break;
+    }
+    case "SEND_WHATSAPP_NOTIFICATION": {
+      await prisma.whatsAppNotification.deleteMany({ where: { id: entry.entityId } });
+      break;
+    }
     case "DETECT_COMMITMENT": {
       await prisma.commitment.update({ where: { id: entry.entityId }, data: { status: "CANCELLED" } });
+      break;
+    }
+    case "UPDATE_COMMITMENT_STATUS": {
+      if (before) {
+        await prisma.commitment.update({ where: { id: entry.entityId }, data: before });
+      }
       break;
     }
     default:

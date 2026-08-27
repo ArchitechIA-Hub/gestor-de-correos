@@ -1,8 +1,10 @@
 import { MOCK_SENDERS, type MockSender } from "./senders";
+import { MOCK_ACCOUNTS, type MockAccount } from "./accounts";
 import { ALL_CATEGORIES, buildEmailBody, type MockCommitment, type TemplateCategory } from "./email-templates";
 
 export type GeneratedEmail = {
   sender: MockSender;
+  account: MockAccount;
   threadId: string;
   subject: string;
   body: string;
@@ -29,6 +31,9 @@ export function generateMockEmails(count: number, now: Date = new Date()): Gener
     // bandeja muestre el mismo remitente+compromiso repetido en bloque).
     const sender = pick(MOCK_SENDERS, i * 7);
     const category = pick(ALL_CATEGORIES, i * 5);
+    // Stride 2: coprimo con la longitud de MOCK_ACCOUNTS (3), a diferencia de
+    // 3 que colapsaría siempre en el mismo índice.
+    const account = pick(MOCK_ACCOUNTS, i * 2);
     const receivedAt = new Date(now.getTime() - i * 45 * 60 * 1000); // escalonado cada 45 min hacia atrás
 
     // Jitter determinístico (~±8h) para que los compromisos de una misma
@@ -41,6 +46,7 @@ export function generateMockEmails(count: number, now: Date = new Date()): Gener
 
     emails.push({
       sender,
+      account,
       threadId: `thread-${i}`,
       subject: template.subject,
       body: template.body,

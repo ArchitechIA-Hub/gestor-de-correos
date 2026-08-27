@@ -17,11 +17,11 @@ export function ScanButton({ backlogCount }: { backlogCount: number }) {
       try {
         const result = await scan();
         setLastResult(
-          `Escaneados ${result.scanned} · ${result.commitmentsDetected} compromisos detectados · ${result.urgentDetected} urgentes`
+          `Escaneados ${result.scanned} · ${result.commitmentsDetected} compromisos detectados · ${result.urgentDetected} urgentes · ${result.marketingDetected} marketing ignorados`
         );
         router.refresh();
       } catch {
-        setError("No se pudo escanear el backlog. Verifica que ANTHROPIC_API_KEY esté configurada correctamente.");
+        setError("No se pudo escanear el backlog. Verifica que OPENAI_API_KEY esté configurada correctamente.");
       }
     });
   }
