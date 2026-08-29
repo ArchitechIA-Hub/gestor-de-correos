@@ -55,6 +55,7 @@ describe("scan", () => {
   it("archiva un correo de marketing sin extraer compromisos", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: true,
       marketingReason: "Newsletter promocional",
       commitments: [],
@@ -76,6 +77,7 @@ describe("scan", () => {
   it("clasifica un correo con un compromiso lejano sin marcarlo urgente", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       commitments: [
@@ -107,6 +109,7 @@ describe("scan", () => {
   it("marca urgente y crea la alerta push cuando el compromiso vence en menos de 48h, sin importar los extras", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       commitments: [
@@ -139,6 +142,7 @@ describe("scan", () => {
     await prisma.extraConfig.create({ data: { calendarEnabled: true } });
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       commitments: [
@@ -166,6 +170,7 @@ describe("scan", () => {
     await prisma.extraConfig.create({ data: { whatsappEnabled: true } });
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       commitments: [
@@ -191,6 +196,7 @@ describe("scan", () => {
   it("no crea eventos de calendario ni notificaciones de WhatsApp si los extras están apagados por defecto", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       commitments: [
@@ -213,6 +219,7 @@ describe("scan", () => {
   it("marca un compromiso como OVERDUE si su fecha ya pasó al momento de detectarlo", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       commitments: [

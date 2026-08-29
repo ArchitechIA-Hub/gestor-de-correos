@@ -11,12 +11,13 @@ datasource db {
 }
 
 model MailAccount {
-  id           String   @id @default(cuid())
-  emailAddress String   @unique
-  label        String
-  provider     String   @default("mock")
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  emailAddress       String   @unique
+  label              String
+  provider           String   @default("mock")
+  isActive           Boolean  @default(true)
+  googleRefreshToken String?
+  createdAt          DateTime @default(now())
 
   emails Email[]
 }
@@ -48,6 +49,7 @@ model Email {
   threadId        String
   subject         String
   rawBody         String
+  summary         String?
   receivedAt      DateTime
   status          EmailStatus @default(UNCLASSIFIED)
   priorityScore   Float       @default(0)
@@ -57,15 +59,31 @@ model Email {
   classifiedAt    DateTime?
   readAt          DateTime?
   respondedAt     DateTime?
+  gmailMessageId  String?     @unique
+  rfcMessageId    String?
   createdAt       DateTime    @default(now())
 
   commitments Commitment[]
   drafts      Draft[]
   urgentAlerts UrgentAlert[]
+  attachments EmailAttachment[]
 
   @@index([status])
   @@index([threadId])
   @@index([mailAccountId])
+}
+
+model EmailAttachment {
+  id                String   @id @default(cuid())
+  emailId           String
+  email             Email    @relation(fields: [emailId], references: [id])
+  filename          String
+  mimeType          String
+  sizeBytes         Int
+  gmailAttachmentId String
+  createdAt         DateTime @default(now())
+
+  @@index([emailId])
 }
 
 enum CommitmentStatus {
@@ -142,6 +160,8 @@ enum AuditActionType {
   MANAGE_MAIL_ACCOUNT
   UPDATE_COMMITMENT_STATUS
   CREATE_URGENT_ALERT
+  IMPORT_EMAIL
+  SEND_DRAFT
 }
 
 enum AuditPerformer {

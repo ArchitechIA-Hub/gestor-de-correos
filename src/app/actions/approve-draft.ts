@@ -3,16 +3,36 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "@/lib/audit/record";
+import { sendGmailReply } from "@/lib/gmail/send";
 
 /**
- * Aprobación humana explícita de un borrador. Este es el único cambio de
- * estado posible hacia "enviable" — el prototipo no implementa ninguna
- * acción de envío real, por lo que "nunca se envía sin aprobación humana"
- * se cumple por construcción.
+ * Aprobación humana explícita de un borrador. Para cuentas conectadas por
+ * Gmail real (provider "gmail"), esto envía la respuesta de verdad vía la
+ * API de Gmail (scope gmail.send) antes de marcar el borrador como
+ * aprobado — si el envío falla, no se aprueba nada. Para cuentas mock, el
+ * comportamiento es el de siempre: solo cambia estado interno, nunca envía
+ * nada real. En ambos casos "nunca se envía sin aprobación humana" se
+ * cumple porque este server action solo se dispara con el clic explícito
+ * del usuario (con confirmación adicional en la UI cuando sí va a enviar).
  */
 export async function approveDraft(draftId: string) {
-  const draft = await prisma.draft.findUniqueOrThrow({ where: { id: draftId } });
+  const draft = await prisma.draft.findUniqueOrThrow({
+    where: { id: draftId },
+    include: { email: { include: { mailAccount: true, sender: true } } },
+  });
   const respondedAt = new Date();
+
+  let sentMessageId: string | null = null;
+  if (draft.email.mailAccount.provider === "gmail") {
+    sentMessageId = await sendGmailReply({
+      mailAccount: draft.email.mailAccount,
+      to: draft.email.sender.email,
+      subject: draft.email.subject,
+      body: draft.content,
+      threadId: draft.email.threadId,
+      inReplyTo: draft.email.rfcMessageId,
+    });
+  }
 
   const [updated] = await prisma.$transaction([
     prisma.draft.update({
@@ -30,11 +50,13 @@ export async function approveDraft(draftId: string) {
   ]);
 
   await recordAuditEvent({
-    actionType: "APPROVE_DRAFT",
+    actionType: sentMessageId ? "SEND_DRAFT" : "APPROVE_DRAFT",
     entityType: "Draft",
     entityId: draftId,
     payloadBefore: { status: draft.status },
-    payloadAfter: { status: "APPROVED" },
+    payloadAfter: sentMessageId
+      ? { status: "APPROVED", to: draft.email.sender.email, subject: draft.email.subject, sentMessageId }
+      : { status: "APPROVED" },
     performedBy: "USER",
     reversible: false,
   });

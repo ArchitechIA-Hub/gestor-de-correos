@@ -7,6 +7,16 @@ import { approveDraft, discardDraft } from "@/app/actions/approve-draft";
 import { editDraft } from "@/app/actions/edit-draft";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
 import type { DraftResponseType } from "@/generated/prisma/enums";
 
 type DraftItem = {
@@ -34,16 +44,23 @@ export function DraftPanel({
   emailId,
   drafts,
   draftGenerationEnabled,
+  mailAccountProvider,
+  recipientEmail,
 }: {
   emailId: string;
   drafts: DraftItem[];
   draftGenerationEnabled: boolean;
+  mailAccountProvider: string;
+  recipientEmail: string;
 }) {
+  const isRealGmailAccount = mailAccountProvider === "gmail";
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generatingType, setGeneratingType] = useState<DraftResponseType | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [confirmDraftId, setConfirmDraftId] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const router = useRouter();
 
   function handleGenerate(responseType: DraftResponseType) {
@@ -67,6 +84,24 @@ export function DraftPanel({
     startTransition(async () => {
       await approveDraft(draftId);
       router.refresh();
+    });
+  }
+
+  function openSendConfirm(draftId: string) {
+    setSendError(null);
+    setConfirmDraftId(draftId);
+  }
+
+  function handleConfirmSend(draftId: string) {
+    setSendError(null);
+    startTransition(async () => {
+      try {
+        await approveDraft(draftId);
+        setConfirmDraftId(null);
+        router.refresh();
+      } catch {
+        setSendError("No se pudo enviar el correo real. Verifica que la cuenta tenga el permiso gmail.send — puede que necesites reconectarla en Configuración.");
+      }
     });
   }
 
@@ -161,9 +196,34 @@ export function DraftPanel({
               </div>
             ) : (
               <div className="mt-3 flex gap-2">
-                <Button size="sm" onClick={() => handleApprove(draft.id)} disabled={isPending}>
-                  Aprobar
-                </Button>
+                {isRealGmailAccount ? (
+                  <Dialog
+                    open={confirmDraftId === draft.id}
+                    onOpenChange={(next) => (next ? openSendConfirm(draft.id) : setConfirmDraftId(null))}
+                  >
+                    <DialogTrigger render={<Button size="sm" disabled={isPending} />}>Aprobar</DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>¿Enviar esta respuesta?</DialogTitle>
+                        <DialogDescription>
+                          Se enviará un correo real a <strong>{recipientEmail}</strong> desde tu cuenta de
+                          Gmail conectada. Esta acción no se puede deshacer.
+                        </DialogDescription>
+                      </DialogHeader>
+                      {sendError && <p className="text-sm text-urgent">{sendError}</p>}
+                      <DialogFooter>
+                        <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
+                        <Button onClick={() => handleConfirmSend(draft.id)} disabled={isPending}>
+                          {isPending ? "Enviando…" : "Sí, enviar"}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                ) : (
+                  <Button size="sm" onClick={() => handleApprove(draft.id)} disabled={isPending}>
+                    Aprobar
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => startEditing(draft)} disabled={isPending}>
                   Editar
                 </Button>
@@ -174,7 +234,9 @@ export function DraftPanel({
             ))}
           {draft.status === "APPROVED" && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Aprobado — este prototipo no envía correos automáticamente; el envío queda fuera de alcance.
+              {isRealGmailAccount
+                ? `Enviado a ${recipientEmail}${draft.approvedAt ? ` el ${new Date(draft.approvedAt).toLocaleString("es-ES")}` : ""}.`
+                : "Aprobado — este prototipo no envía correos automáticamente; el envío queda fuera de alcance."}
             </p>
           )}
         </div>

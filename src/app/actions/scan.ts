@@ -19,17 +19,30 @@ export type ScanResult = {
   marketingDetected: number;
 };
 
+export type ScanOptions = {
+  /**
+   * Si se pasa, limita el lote a los correos sin clasificar de esa cuenta —
+   * útil para clasificar de inmediato una cuenta recién conectada (p. ej.
+   * Gmail) sin esperar a vaciar el backlog global por antigüedad. Sin este
+   * filtro, el comportamiento es el de siempre: lote global por antigüedad.
+   */
+  mailAccountId?: string;
+};
+
 /**
  * Ejecuta un ciclo de escaneo sobre el backlog: toma un lote de correos sin
  * clasificar, extrae compromisos con IA sobre el texto libre, recalcula
  * prioridad, aplica el override de urgencia <48h, y audita cada acción.
  */
-export async function scan(): Promise<ScanResult> {
+export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
   const now = new Date();
   const extraConfig = await getExtraConfig();
 
   const unclassified = await prisma.email.findMany({
-    where: { status: "UNCLASSIFIED" },
+    where: {
+      status: "UNCLASSIFIED",
+      ...(options.mailAccountId ? { mailAccountId: options.mailAccountId } : {}),
+    },
     include: { sender: true },
     orderBy: { receivedAt: "asc" },
     take: SCAN_BATCH_SIZE,
@@ -50,7 +63,12 @@ export async function scan(): Promise<ScanResult> {
       marketingDetected++;
 
       const before = { status: email.status, priorityScore: email.priorityScore, isUrgent: email.isUrgent, isMarketing: email.isMarketing };
-      const after = { status: "ARCHIVED" as const, isMarketing: true, marketingReason: extraction.marketingReason };
+      const after = {
+        status: "ARCHIVED" as const,
+        isMarketing: true,
+        marketingReason: extraction.marketingReason,
+        summary: extraction.summary,
+      };
 
       await prisma.email.update({
         where: { id: email.id },
@@ -121,7 +139,7 @@ export async function scan(): Promise<ScanResult> {
 
     await prisma.email.update({
       where: { id: email.id },
-      data: { status: "CLASSIFIED", priorityScore, isUrgent, classifiedAt: now },
+      data: { status: "CLASSIFIED", priorityScore, isUrgent, classifiedAt: now, summary: extraction.summary },
     });
 
     await recordAuditEvent({

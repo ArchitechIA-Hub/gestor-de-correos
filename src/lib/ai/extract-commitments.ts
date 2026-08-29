@@ -5,6 +5,10 @@ import { zodTextFormat } from "openai/helpers/zod";
 // Prompt estable — reutilizado en cada correo de un batch de escaneo.
 const SYSTEM_PROMPT = `Eres un asistente que analiza correos electrónicos en español para detectar compromisos y fechas límite mencionados en TEXTO LIBRE (no en campos estructurados), y para filtrar correos innecesarios.
 
+Regla de resumen (aplica siempre, sin importar si es marketing o no):
+- Genera "summary": 1-2 frases en lenguaje natural sobre qué dice y qué pide el remitente.
+- Ignora firmas, pies de página legales, avisos de cancelación de suscripción, enlaces de tracking y demás relleno — quédate solo con el contenido real.
+
 Reglas de clasificación de marketing:
 - Marca isMarketing como true si el correo es una newsletter, boletín informativo, promoción, oferta comercial, publicidad, invitación masiva a evento genérico, u otro contenido masivo que no requiere acción personal del destinatario.
 - No marques como marketing un correo de un colega, cliente, proveedor o socio que te pida algo, te informe de un compromiso, o requiera una respuesta personal, aunque mencione productos u ofertas dentro del contexto de una relación de negocio real.

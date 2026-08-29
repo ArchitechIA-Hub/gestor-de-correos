@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 export const CommitmentExtractionSchema = z.object({
+  summary: z
+    .string()
+    .describe(
+      "Resumen de 1-2 frases en español del contenido real del correo, en lenguaje natural — ignora firmas, pies de página legales, enlaces de tracking/cancelación de suscripción y demás relleno; enfócate en qué dice y qué pide el remitente"
+    ),
   isMarketing: z
     .boolean()
     .describe(
