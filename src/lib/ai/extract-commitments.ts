@@ -20,7 +20,11 @@ Reglas de extracción de compromisos (solo aplican cuando isMarketing es false):
 - Resuelve fechas relativas ("para el viernes", "en 15 días", "antes de mañana") contra la fecha de recepción del correo que se te indicará.
 - Si una fecha es ambigua o no se puede resolver con certeza, aún así repórtala con confidence "LOW" y dueDateISO en tu mejor estimación, o null si es imposible de estimar.
 - Si el correo no contiene ningún compromiso ni fecha límite, responde con una lista vacía.
-- No inventes compromisos que no estén sustentados por el texto del correo.`;
+- No inventes compromisos que no estén sustentados por el texto del correo.
+- Regla explícita para invitaciones de calendario/reunión (Google Calendar, Outlook, Zoom, Meet
+  y similares): el evento en sí SIEMPRE cuenta como compromiso con fecha límite, sin excepción —
+  repórtalo en "commitments" con dueDateISO igual a la fecha/hora de inicio del evento, incluso si
+  la asistencia es "opcional" o el resumen ya menciona esa misma fecha. No lo omitas.`;
 
 export type ExtractCommitmentsInput = {
   subject: string;
