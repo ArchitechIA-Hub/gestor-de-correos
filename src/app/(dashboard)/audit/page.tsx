@@ -25,6 +25,8 @@ const ACTION_LABELS: Record<string, string> = {
   MANAGE_MAIL_ACCOUNT: "Cuenta de correo gestionada",
   UPDATE_COMMITMENT_STATUS: "Estado de compromiso actualizado",
   CREATE_URGENT_ALERT: "Alerta push creada",
+  IMPORT_EMAIL: "Correo importado de Gmail",
+  SEND_DRAFT: "Respuesta enviada",
 };
 
 export default async function AuditPage() {

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const BASE_LINKS = [
   { href: "/inbox", label: "Bandeja" },
+  { href: "/sent", label: "Enviados" },
   { href: "/digest", label: "Informe" },
   { href: "/audit", label: "Auditoría" },
   { href: "/settings/accounts", label: "Cuentas" },
