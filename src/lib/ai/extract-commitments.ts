@@ -1,5 +1,6 @@
 import { openai, OPENAI_MODEL } from "./client";
 import { CommitmentExtractionSchema, type CommitmentExtraction } from "./schemas";
+import { getTimeZoneOffset } from "@/lib/format/timezone";
 import { zodTextFormat } from "openai/helpers/zod";
 
 // Prompt estable — reutilizado en cada correo de un batch de escaneo.
@@ -18,6 +19,7 @@ Reglas de clasificación de marketing:
 Reglas de extracción de compromisos (solo aplican cuando isMarketing es false):
 - Detecta cualquier compromiso, promesa o fecha límite mencionada explícita o implícitamente en el cuerpo del correo, sin importar en qué parte del texto aparezca.
 - Resuelve fechas relativas ("para el viernes", "en 15 días", "antes de mañana") contra la fecha de recepción del correo que se te indicará.
+- Devuelve "dueDateISO" en ISO 8601 CON desfase horario explícito de la zona del usuario (p. ej. "2026-09-01T17:00:00-05:00"). Nunca sin desfase ni en UTC ("Z"), salvo que el correo indique explícitamente otra zona.
 - Si una fecha es ambigua o no se puede resolver con certeza, aún así repórtala con confidence "LOW" y dueDateISO en tu mejor estimación, o null si es imposible de estimar.
 - Si el correo no contiene ningún compromiso ni fecha límite, responde con una lista vacía.
 - No inventes compromisos que no estén sustentados por el texto del correo.
@@ -30,13 +32,31 @@ export type ExtractCommitmentsInput = {
   subject: string;
   body: string;
   receivedAt: Date;
+  /** Zona horaria del usuario, para resolver fechas relativas y devolver el desfase correcto. */
+  timeZone: string;
 };
 
 export async function extractCommitments(input: ExtractCommitmentsInput): Promise<CommitmentExtraction> {
+  const offset = getTimeZoneOffset(input.receivedAt, input.timeZone);
+  // Hora de pared en la zona del usuario (sv-SE ⇒ "2026-09-01 09:00:00").
+  const receivedLocal = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: input.timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+    .format(input.receivedAt)
+    .replace(" ", "T");
+  const receivedLine = `Fecha de recepción del correo: ${receivedLocal}${offset} (zona del usuario: ${input.timeZone})`;
+
   const response = await openai.responses.parse({
     model: OPENAI_MODEL,
     instructions: SYSTEM_PROMPT,
-    input: `Fecha de recepción del correo: ${input.receivedAt.toISOString()}\nAsunto: ${input.subject}\n\nCuerpo:\n${input.body}`,
+    input: `${receivedLine}\nAsunto: ${input.subject}\n\nCuerpo:\n${input.body}`,
     max_output_tokens: 4096,
     text: {
       format: zodTextFormat(CommitmentExtractionSchema, "commitment_extraction"),

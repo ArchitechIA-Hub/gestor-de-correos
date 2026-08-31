@@ -256,4 +256,28 @@ describe("scan", () => {
     const commitment = await prisma.commitment.findFirstOrThrow();
     expect(commitment.status).toBe("OVERDUE");
   });
+
+  it("resuelve un dueDateISO sin desfase en la zona del usuario (America/Bogota por defecto)", async () => {
+    await seedUnclassifiedEmail();
+    mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
+      isMarketing: false,
+      marketingReason: null,
+      commitments: [
+        {
+          description: "Llamada de seguimiento",
+          dueDateISO: "2026-09-01T09:00:00",
+          isExplicitDate: true,
+          confidence: "HIGH",
+          sourceExcerpt: "mañana a las 9",
+        },
+      ],
+    });
+
+    await scan();
+
+    const commitment = await prisma.commitment.findFirstOrThrow();
+    // 09:00 en Bogotá (−05:00) = 14:00 UTC
+    expect(commitment.dueAt?.toISOString()).toBe("2026-09-01T14:00:00.000Z");
+  });
 });

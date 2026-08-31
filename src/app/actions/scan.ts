@@ -9,6 +9,8 @@ import { createUrgentAlert } from "@/lib/alerts";
 import { createCalendarEvent } from "@/lib/calendar";
 import { sendWhatsAppNotification } from "@/lib/whatsapp";
 import { getExtraConfig } from "@/lib/extras";
+import { getUserTimeZone } from "@/lib/settings";
+import { parseDueDate } from "@/lib/ai/parse-due-date";
 import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 
 export type ScanResult = {
@@ -36,6 +38,7 @@ export type ScanOptions = {
 export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
   const now = new Date();
   const extraConfig = await getExtraConfig();
+  const timeZone = await getUserTimeZone();
 
   const unclassified = await prisma.email.findMany({
     where: {
@@ -56,6 +59,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
       subject: email.subject,
       body: email.rawBody,
       receivedAt: email.receivedAt,
+      timeZone,
     });
 
     if (extraction.isMarketing) {
@@ -95,15 +99,16 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
 
     const createdCommitments = [];
     for (const c of extraction.commitments) {
+      const dueAt = parseDueDate(c.dueDateISO, timeZone);
       const created = await prisma.commitment.create({
         data: {
           emailId: email.id,
           description: c.description,
-          dueAt: c.dueDateISO ? new Date(c.dueDateISO) : null,
+          dueAt,
           confidence: c.confidence,
           sourceExcerpt: c.sourceExcerpt,
           detectedByAI: true,
-          status: c.dueDateISO && new Date(c.dueDateISO).getTime() < now.getTime() ? "OVERDUE" : "PENDING",
+          status: dueAt && dueAt.getTime() < now.getTime() ? "OVERDUE" : "PENDING",
         },
       });
       createdCommitments.push(created);
