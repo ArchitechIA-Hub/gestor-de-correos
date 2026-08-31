@@ -35,6 +35,35 @@ export async function createMailAccount(input: { emailAddress: string; label: st
   return account;
 }
 
+export async function renameMailAccount(id: string, label: string) {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    throw new Error("La cuenta necesita un nombre.");
+  }
+
+  const account = await prisma.mailAccount.findUniqueOrThrow({ where: { id } });
+  if (account.label === trimmed) {
+    return account;
+  }
+
+  const updated = await prisma.mailAccount.update({ where: { id }, data: { label: trimmed } });
+
+  await recordAuditEvent({
+    actionType: "MANAGE_MAIL_ACCOUNT",
+    entityType: "MailAccount",
+    entityId: id,
+    payloadBefore: { label: account.label },
+    payloadAfter: { label: trimmed },
+    performedBy: "USER",
+  });
+
+  revalidatePath("/settings/accounts");
+  revalidatePath("/inbox");
+  revalidatePath("/audit");
+
+  return updated;
+}
+
 export async function setMailAccountActive(id: string, isActive: boolean) {
   const account = await prisma.mailAccount.findUniqueOrThrow({ where: { id } });
   const before = { isActive: account.isActive };

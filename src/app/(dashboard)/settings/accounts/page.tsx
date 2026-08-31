@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MailAccountForm } from "@/components/settings/mail-account-form";
+import { MailAccountRename } from "@/components/settings/mail-account-rename";
 import { MailAccountToggle } from "@/components/settings/mail-account-toggle";
 import { GmailImportButton } from "@/components/settings/gmail-import-button";
 import { ScanAccountButton } from "@/components/settings/scan-account-button";
@@ -76,7 +77,7 @@ export default async function MailAccountsSettingsPage({
           >
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">{account.label}</span>
+                <MailAccountRename accountId={account.id} currentLabel={account.label} />
                 {account.provider === "gmail" && <Badge>Gmail</Badge>}
                 {!account.isActive && <Badge variant="outline">Inactiva</Badge>}
               </div>
