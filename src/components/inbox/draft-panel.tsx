@@ -19,6 +19,25 @@ import {
 } from "@/components/ui/dialog";
 import type { DraftResponseType } from "@/generated/prisma/enums";
 
+/** Debe coincidir con MAX_OUTGOING_ATTACHMENTS_BYTES en src/lib/gmail/send.ts. */
+const MAX_ATTACHMENTS_BYTES = 10 * 1024 * 1024;
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
 type DraftItem = {
   id: string;
   content: string;
@@ -61,7 +80,11 @@ export function DraftPanel({
   const [editValue, setEditValue] = useState("");
   const [confirmDraftId, setConfirmDraftId] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const router = useRouter();
+
+  const attachmentsTotalBytes = attachedFiles.reduce((sum, f) => sum + f.size, 0);
+  const attachmentsTooLarge = attachmentsTotalBytes > MAX_ATTACHMENTS_BYTES;
 
   function handleGenerate(responseType: DraftResponseType) {
     setError(null);
@@ -89,15 +112,43 @@ export function DraftPanel({
 
   function openSendConfirm(draftId: string) {
     setSendError(null);
+    setAttachedFiles([]);
     setConfirmDraftId(draftId);
   }
 
+  function closeSendConfirm() {
+    setConfirmDraftId(null);
+    setAttachedFiles([]);
+    setSendError(null);
+  }
+
+  function addAttachments(fileList: FileList | null) {
+    if (!fileList || fileList.length === 0) return;
+    const incoming = Array.from(fileList);
+    setAttachedFiles((prev) => {
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`));
+      return [...prev, ...incoming.filter((f) => !seen.has(`${f.name}:${f.size}`))];
+    });
+  }
+
+  function removeAttachment(index: number) {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
   function handleConfirmSend(draftId: string) {
+    if (attachmentsTooLarge) return;
     setSendError(null);
     startTransition(async () => {
       try {
-        await approveDraft(draftId);
-        setConfirmDraftId(null);
+        const attachments = await Promise.all(
+          attachedFiles.map(async (f) => ({
+            filename: f.name,
+            mimeType: f.type || "application/octet-stream",
+            contentBase64: await fileToBase64(f),
+          }))
+        );
+        await approveDraft(draftId, attachments);
+        closeSendConfirm();
         router.refresh();
       } catch {
         setSendError("No se pudo enviar el correo real. Verifica que la cuenta tenga el permiso gmail.send — puede que necesites reconectarla en Configuración.");
@@ -199,7 +250,7 @@ export function DraftPanel({
                 {isRealGmailAccount ? (
                   <Dialog
                     open={confirmDraftId === draft.id}
-                    onOpenChange={(next) => (next ? openSendConfirm(draft.id) : setConfirmDraftId(null))}
+                    onOpenChange={(next) => (next ? openSendConfirm(draft.id) : closeSendConfirm())}
                   >
                     <DialogTrigger render={<Button size="sm" disabled={isPending} />}>Aprobar</DialogTrigger>
                     <DialogContent>
@@ -210,11 +261,63 @@ export function DraftPanel({
                           Gmail conectada. Esta acción no se puede deshacer.
                         </DialogDescription>
                       </DialogHeader>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-foreground">
+                          Adjuntos <span className="font-normal text-muted-foreground">(opcional)</span>
+                        </label>
+                        <input
+                          type="file"
+                          multiple
+                          onChange={(e) => {
+                            addAttachments(e.target.files);
+                            e.target.value = "";
+                          }}
+                          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:text-sm file:text-foreground hover:file:bg-muted"
+                        />
+                        {attachedFiles.length > 0 && (
+                          <ul className="flex flex-col gap-1">
+                            {attachedFiles.map((file, index) => (
+                              <li
+                                key={`${file.name}:${file.size}`}
+                                className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-1.5 text-xs"
+                              >
+                                <span className="truncate text-foreground">
+                                  {file.name}{" "}
+                                  <span className="text-muted-foreground">· {formatFileSize(file.size)}</span>
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAttachment(index)}
+                                  disabled={isPending}
+                                  className="shrink-0 text-muted-foreground hover:text-urgent"
+                                >
+                                  Quitar
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {attachmentsTooLarge && (
+                          <p className="text-xs text-urgent">
+                            Los adjuntos suman {formatFileSize(attachmentsTotalBytes)} — el máximo es{" "}
+                            {formatFileSize(MAX_ATTACHMENTS_BYTES)}.
+                          </p>
+                        )}
+                      </div>
+
                       {sendError && <p className="text-sm text-urgent">{sendError}</p>}
                       <DialogFooter>
                         <DialogClose render={<Button variant="outline" />}>Cancelar</DialogClose>
-                        <Button onClick={() => handleConfirmSend(draft.id)} disabled={isPending}>
-                          {isPending ? "Enviando…" : "Sí, enviar"}
+                        <Button
+                          onClick={() => handleConfirmSend(draft.id)}
+                          disabled={isPending || attachmentsTooLarge}
+                        >
+                          {isPending
+                            ? "Enviando…"
+                            : attachedFiles.length > 0
+                              ? `Sí, enviar con ${attachedFiles.length} adjunto${attachedFiles.length > 1 ? "s" : ""}`
+                              : "Sí, enviar"}
                         </Button>
                       </DialogFooter>
                     </DialogContent>

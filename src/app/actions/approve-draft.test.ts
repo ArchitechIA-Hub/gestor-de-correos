@@ -105,6 +105,36 @@ describe("approveDraft", () => {
     });
   });
 
+  it("cuenta gmail con adjuntos: los pasa a sendGmailReply y los lista en la auditoría", async () => {
+    const { draft, email, sender } = await seedDraft({ provider: "gmail", googleRefreshToken: "refresh-token" });
+    mockedSendGmailReply.mockResolvedValue("sent-message-id-456");
+
+    const attachments = [
+      { filename: "propuesta.pdf", mimeType: "application/pdf", contentBase64: "cGRmZGF0YQ==" },
+    ];
+    await approveDraft(draft.id, attachments);
+
+    expect(mockedSendGmailReply).toHaveBeenCalledWith({
+      mailAccount: expect.objectContaining({ googleRefreshToken: "refresh-token" }),
+      to: sender.email,
+      subject: email.subject,
+      body: draft.content,
+      threadId: email.threadId,
+      inReplyTo: email.rfcMessageId,
+      attachments,
+    });
+
+    const auditEntries = await prisma.auditLogEntry.findMany();
+    expect(auditEntries).toHaveLength(1);
+    expect(JSON.parse(auditEntries[0].payloadAfter!)).toEqual({
+      status: "APPROVED",
+      to: sender.email,
+      subject: email.subject,
+      sentMessageId: "sent-message-id-456",
+      attachments: ["propuesta.pdf"],
+    });
+  });
+
   it("cuenta gmail: si el envío falla, no aprueba el borrador ni audita nada", async () => {
     const { draft, email } = await seedDraft({ provider: "gmail", googleRefreshToken: "refresh-token" });
     mockedSendGmailReply.mockRejectedValue(new Error("Gmail API error"));

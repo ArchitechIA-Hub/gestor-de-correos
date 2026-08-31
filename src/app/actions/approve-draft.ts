@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "@/lib/audit/record";
-import { sendGmailReply } from "@/lib/gmail/send";
+import { sendGmailReply, type OutgoingAttachment } from "@/lib/gmail/send";
 
 /**
  * Aprobación humana explícita de un borrador. Para cuentas conectadas por
@@ -14,8 +14,11 @@ import { sendGmailReply } from "@/lib/gmail/send";
  * nada real. En ambos casos "nunca se envía sin aprobación humana" se
  * cumple porque este server action solo se dispara con el clic explícito
  * del usuario (con confirmación adicional en la UI cuando sí va a enviar).
+ *
+ * `attachments` solo aplica a cuentas Gmail reales: son los archivos que el
+ * usuario adjuntó en el diálogo de confirmación antes de enviar.
  */
-export async function approveDraft(draftId: string) {
+export async function approveDraft(draftId: string, attachments: OutgoingAttachment[] = []) {
   const draft = await prisma.draft.findUniqueOrThrow({
     where: { id: draftId },
     include: { email: { include: { mailAccount: true, sender: true } } },
@@ -31,8 +34,10 @@ export async function approveDraft(draftId: string) {
       body: draft.content,
       threadId: draft.email.threadId,
       inReplyTo: draft.email.rfcMessageId,
+      ...(attachments.length > 0 ? { attachments } : {}),
     });
   }
+  const attachmentNames = attachments.map((a) => a.filename);
 
   const [updated] = await prisma.$transaction([
     prisma.draft.update({
@@ -55,7 +60,13 @@ export async function approveDraft(draftId: string) {
     entityId: draftId,
     payloadBefore: { status: draft.status },
     payloadAfter: sentMessageId
-      ? { status: "APPROVED", to: draft.email.sender.email, subject: draft.email.subject, sentMessageId }
+      ? {
+          status: "APPROVED",
+          to: draft.email.sender.email,
+          subject: draft.email.subject,
+          sentMessageId,
+          ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
+        }
       : { status: "APPROVED" },
     performedBy: "USER",
     reversible: false,
