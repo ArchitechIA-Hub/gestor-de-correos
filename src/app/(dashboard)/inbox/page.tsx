@@ -124,6 +124,7 @@ export default async function InboxPage({
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
+              <TableHead className="w-6 py-2" />
               <TableHead className="py-2 text-xs">Remitente</TableHead>
               <TableHead className="py-2 text-xs">Cuenta</TableHead>
               <TableHead className="py-2 text-xs">Asunto</TableHead>
@@ -144,10 +145,20 @@ export default async function InboxPage({
               const isUnread = !isMarketingView && !email.readAt;
               return (
                 <TableRow key={email.id} className={isMarketingView ? undefined : "cursor-pointer"}>
+                  <TableCell className="py-1.5 pr-0 pl-3 align-middle">
+                    {isUnread && (
+                      <span className="block size-2 rounded-full bg-primary" aria-label="No leído" />
+                    )}
+                  </TableCell>
                   <TableCell className="py-1.5">
                     <Link href={`/inbox/${email.id}`} className="block">
                       <div className="flex items-center gap-2">
-                        <span className={cn("text-sm text-foreground", isUnread ? "font-bold" : "font-medium")}>
+                        <span
+                          className={cn(
+                            "text-sm",
+                            isUnread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
+                          )}
+                        >
                           {email.sender.name}
                         </span>
                         {email.sender.isVip && (
@@ -165,7 +176,10 @@ export default async function InboxPage({
                   <TableCell className="py-1.5">
                     <Link
                       href={`/inbox/${email.id}`}
-                      className={cn("line-clamp-1 block max-w-2xs text-sm", isUnread && "font-bold text-foreground")}
+                      className={cn(
+                        "line-clamp-1 block max-w-2xs text-sm",
+                        isUnread ? "font-bold text-foreground" : "text-muted-foreground"
+                      )}
                     >
                       {email.subject}
                     </Link>
@@ -213,7 +227,7 @@ export default async function InboxPage({
             })}
             {emails.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                   {isMarketingView
                     ? "No hay correos de marketing ignorados en este momento."
                     : "Todavía no hay correos clasificados. Escanea el backlog para empezar."}
