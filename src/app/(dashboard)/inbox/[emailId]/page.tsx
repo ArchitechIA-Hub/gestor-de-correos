@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { DraftPanel } from "@/components/inbox/draft-panel";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
+import { AutoMarkRead } from "@/components/inbox/auto-mark-read";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getExtraConfig } from "@/lib/extras";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
@@ -60,6 +61,7 @@ export default async function EmailThreadPage({
 
   return (
     <div className="flex flex-col gap-8">
+      <AutoMarkRead emailId={email.id} alreadyRead={!!email.readAt} />
       <div>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
