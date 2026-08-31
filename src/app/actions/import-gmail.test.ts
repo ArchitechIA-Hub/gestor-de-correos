@@ -55,6 +55,30 @@ describe("importGmailEmails", () => {
     });
   });
 
+  it("usa el límite por defecto (50) cuando no se pasa uno", async () => {
+    const account = await seedGmailAccount();
+
+    await importGmailEmails(account.id);
+
+    expect(listMock.mock.calls[0][0]).toMatchObject({ maxResults: 50 });
+  });
+
+  it("recorta un límite demasiado alto al máximo (500)", async () => {
+    const account = await seedGmailAccount();
+
+    await importGmailEmails(account.id, 9999);
+
+    expect(listMock.mock.calls[0][0]).toMatchObject({ maxResults: 500 });
+  });
+
+  it("recorta un límite demasiado bajo al mínimo (1)", async () => {
+    const account = await seedGmailAccount();
+
+    await importGmailEmails(account.id, 0);
+
+    expect(listMock.mock.calls[0][0]).toMatchObject({ maxResults: 1 });
+  });
+
   it("rechaza una cuenta que no está conectada a Gmail", async () => {
     const account = await prisma.mailAccount.create({
       data: { emailAddress: "mock@test.local", label: "Cuenta mock" },

@@ -26,18 +26,19 @@ async function resetDb() {
   await prisma.extraConfig.deleteMany();
 }
 
-async function seedUnclassifiedEmail(overrides: { isVip?: boolean } = {}) {
+async function seedUnclassifiedEmail(overrides: { isVip?: boolean; index?: number } = {}) {
+  const i = overrides.index ?? 0;
   const account = await prisma.mailAccount.create({
-    data: { emailAddress: "cuenta@test.local", label: "Cuenta de prueba" },
+    data: { emailAddress: `cuenta${i}@test.local`, label: `Cuenta de prueba ${i}` },
   });
   const sender = await prisma.sender.create({
-    data: { email: "remitente@test.local", name: "Remitente de Prueba", isVip: overrides.isVip ?? false },
+    data: { email: `remitente${i}@test.local`, name: `Remitente de Prueba ${i}`, isVip: overrides.isVip ?? false },
   });
   return prisma.email.create({
     data: {
       senderId: sender.id,
       mailAccountId: account.id,
-      threadId: "thread-1",
+      threadId: `thread-${i}`,
       subject: "Asunto de prueba",
       rawBody: "Cuerpo del correo de prueba",
       receivedAt: new Date(),
@@ -214,6 +215,23 @@ describe("scan", () => {
 
     expect(await prisma.calendarEvent.count()).toBe(0);
     expect(await prisma.whatsAppNotification.count()).toBe(0);
+  });
+
+  it("procesa como máximo SCAN_BATCH_SIZE (20) correos por pasada", async () => {
+    for (let i = 0; i < 25; i++) {
+      await seedUnclassifiedEmail({ index: i });
+    }
+    mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
+      isMarketing: false,
+      marketingReason: null,
+      commitments: [],
+    });
+
+    const result = await scan();
+
+    expect(result.scanned).toBe(20);
+    expect(await prisma.email.count({ where: { status: "UNCLASSIFIED" } })).toBe(5);
   });
 
   it("marca un compromiso como OVERDUE si su fecha ya pasó al momento de detectarlo", async () => {

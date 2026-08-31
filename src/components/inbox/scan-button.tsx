@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { scan } from "@/app/actions/scan";
+import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 import { Button } from "@/components/ui/button";
 
 export function ScanButton({ backlogCount }: { backlogCount: number }) {
@@ -34,7 +35,7 @@ export function ScanButton({ backlogCount }: { backlogCount: number }) {
     <div className="flex flex-col items-end gap-1.5">
       <div className="flex items-center gap-3">
         <Button onClick={handleScan} disabled={isPending} size="sm">
-          {isPending ? "Escaneando…" : `Escanear siguiente lote (${Math.min(backlogCount, 8)})`}
+          {isPending ? "Escaneando…" : `Escanear siguiente lote (${Math.min(backlogCount, SCAN_BATCH_SIZE)})`}
         </Button>
         {lastResult && <span className="text-xs text-muted-foreground">{lastResult}</span>}
       </div>

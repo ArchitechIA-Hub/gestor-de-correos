@@ -9,8 +9,7 @@ import { createUrgentAlert } from "@/lib/alerts";
 import { createCalendarEvent } from "@/lib/calendar";
 import { sendWhatsAppNotification } from "@/lib/whatsapp";
 import { getExtraConfig } from "@/lib/extras";
-
-const SCAN_BATCH_SIZE = 8;
+import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 
 export type ScanResult = {
   scanned: number;

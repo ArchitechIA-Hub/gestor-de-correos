@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { getGmailClientForAccount } from "@/lib/gmail/client";
-import { PRIMARY_INBOX_LABEL_IDS } from "@/lib/gmail/constants";
+import {
+  DEFAULT_GMAIL_IMPORT_LIMIT,
+  MAX_GMAIL_IMPORT_LIMIT,
+  MIN_GMAIL_IMPORT_LIMIT,
+  PRIMARY_INBOX_LABEL_IDS,
+} from "@/lib/gmail/constants";
 import { parseGmailMessage } from "@/lib/gmail/parse-message";
 
 export type ImportGmailResult = {
@@ -19,19 +24,25 @@ export type ImportGmailResult = {
  * UNCLASSIFIED — el `scan()` existente las recoge en el siguiente ciclo,
  * igual que a los correos mock. No clasifica ni llama a IA aquí.
  */
-export async function importGmailEmails(mailAccountId: string, limit = 10): Promise<ImportGmailResult> {
+export async function importGmailEmails(
+  mailAccountId: string,
+  limit: number = DEFAULT_GMAIL_IMPORT_LIMIT
+): Promise<ImportGmailResult> {
   const mailAccount = await prisma.mailAccount.findUniqueOrThrow({ where: { id: mailAccountId } });
 
   if (mailAccount.provider !== "gmail" || !mailAccount.googleRefreshToken) {
     throw new Error("Esta cuenta no está conectada a Gmail.");
   }
 
+  const requested = Number.isFinite(limit) ? Math.floor(limit) : DEFAULT_GMAIL_IMPORT_LIMIT;
+  const clampedLimit = Math.min(MAX_GMAIL_IMPORT_LIMIT, Math.max(MIN_GMAIL_IMPORT_LIMIT, requested));
+
   const gmail = getGmailClientForAccount(mailAccount);
 
   const list = await gmail.users.messages.list({
     userId: "me",
     labelIds: [...PRIMARY_INBOX_LABEL_IDS],
-    maxResults: limit,
+    maxResults: clampedLimit,
   });
 
   const messageIds = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
