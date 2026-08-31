@@ -4,12 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CURRENT_USER_NAME } from "@/lib/config";
 import { cn } from "@/lib/utils";
-import { getAppSettings } from "@/lib/settings";
+import { getAppSettings, getUserTimeZone } from "@/lib/settings";
+import { formatLongDate } from "@/lib/format/date";
 import { SendDigestControl } from "@/components/digest/send-digest-control";
 
-function formatDate(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
-}
+export const dynamic = "force-dynamic";
 
 const STATUS_LABELS: Record<string, string> = {
   UNCLASSIFIED: "Sin clasificar",
@@ -69,12 +68,14 @@ export default async function DigestPage({
     getAppSettings(),
   ]);
 
+  const tz = await getUserTimeZone();
+
   return (
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="font-heading text-2xl text-foreground">Informe de {CURRENT_USER_NAME}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {formatDate(rangeStart)} — {formatDate(rangeEnd)}
+          {formatLongDate(rangeStart, tz)} — {formatLongDate(rangeEnd, tz)}
         </p>
         <div className="mt-3 flex gap-2 text-sm">
           <Link
@@ -139,7 +140,7 @@ export default async function DigestPage({
                       <span className="line-clamp-1">{email.subject}</span>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {formatDate(email.receivedAt)}
+                      {formatLongDate(email.receivedAt, tz)}
                     </TableCell>
                     <TableCell>
                       {email.isUrgent ? (
@@ -192,7 +193,7 @@ export default async function DigestPage({
                   </div>
                   {sender.emails[0] && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Último correo: {sender.emails[0].subject} · {formatDate(sender.emails[0].receivedAt)}
+                      Último correo: {sender.emails[0].subject} · {formatLongDate(sender.emails[0].receivedAt, tz)}
                     </p>
                   )}
                 </div>

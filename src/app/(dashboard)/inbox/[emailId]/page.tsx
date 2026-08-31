@@ -8,10 +8,8 @@ import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getExtraConfig } from "@/lib/extras";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
 import { buildGoogleCalendarUrl } from "@/lib/calendar/links";
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+import { getUserTimeZone } from "@/lib/settings";
+import { formatLongDateTime } from "@/lib/format/date";
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -48,6 +46,8 @@ export default async function EmailThreadPage({
     getExtraConfig(),
   ]);
 
+  const tz = await getUserTimeZone();
+
   if (!email) notFound();
 
   const vipSlaStatus = extraConfig.vipSlaEnabled
@@ -75,7 +75,7 @@ export default async function EmailThreadPage({
           {vipSlaStatus === "breached" && <Badge className="bg-urgent text-urgent-foreground">SLA VIP incumplido</Badge>}
           {vipSlaStatus === "compliant" && <Badge variant="secondary">SLA VIP cumplido</Badge>}
           {email.sender.organization && <span>· {email.sender.organization}</span>}
-          <span>· {formatDate(email.receivedAt)}</span>
+          <span>· {formatLongDateTime(email.receivedAt, tz)}</span>
           <span>· Recibido en {email.mailAccount.label}</span>
         </div>
       </div>
@@ -149,7 +149,7 @@ export default async function EmailThreadPage({
                 </div>
                 {c.dueAt && (
                   <>
-                    <p className="mt-1 text-xs text-muted-foreground">Vence {formatDate(c.dueAt)} · confianza {c.confidence}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Vence {formatLongDateTime(c.dueAt, tz)} · confianza {c.confidence}</p>
                     <div className="mt-1 flex items-center gap-3 text-xs">
                       <a
                         href={buildGoogleCalendarUrl({ title: c.description, description: c.sourceExcerpt, start: c.dueAt })}

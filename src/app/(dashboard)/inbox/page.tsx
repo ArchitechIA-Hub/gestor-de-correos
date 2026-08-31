@@ -7,13 +7,11 @@ import { UnmarkMarketingButton } from "@/components/inbox/unmark-marketing-butto
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getActiveMailAccounts } from "@/lib/mail-accounts";
+import { getUserTimeZone } from "@/lib/settings";
+import { formatShortDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 function buildHref(params: { account?: string; view?: string }) {
   const search = new URLSearchParams();
@@ -31,7 +29,11 @@ export default async function InboxPage({
   const { account: accountId, view } = await searchParams;
   const isMarketingView = view === "marketing";
 
-  const [{ backlogCount }, accounts] = await Promise.all([getCurrentServiceLevel(), getActiveMailAccounts()]);
+  const [{ backlogCount }, accounts, tz] = await Promise.all([
+    getCurrentServiceLevel(),
+    getActiveMailAccounts(),
+    getUserTimeZone(),
+  ]);
 
   const accountFilter = accountId ? { mailAccountId: accountId } : {};
 
@@ -180,7 +182,7 @@ export default async function InboxPage({
                         <div className="flex flex-col">
                           <span className="line-clamp-1 text-xs">{nearest.description}</span>
                           {nearest.dueAt && (
-                            <span className="text-xs text-muted-foreground">Vence {formatDate(nearest.dueAt)}</span>
+                            <span className="text-xs text-muted-foreground">Vence {formatShortDateTime(nearest.dueAt, tz)}</span>
                           )}
                         </div>
                       ) : (
@@ -189,7 +191,7 @@ export default async function InboxPage({
                     </TableCell>
                   )}
                   <TableCell className="whitespace-nowrap py-1.5 text-xs text-muted-foreground">
-                    {formatDate(email.receivedAt)}
+                    {formatShortDateTime(email.receivedAt, tz)}
                   </TableCell>
                   <TableCell className="py-1.5 text-right whitespace-nowrap">
                     {isMarketingView ? (

@@ -4,12 +4,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RescueActions } from "@/components/rescue/rescue-actions";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getRescuePlan } from "@/lib/priority/rescue";
+import { getUserTimeZone } from "@/lib/settings";
+import { formatShortDateTime } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 export default async function RescuePage() {
   const { features } = await getCurrentServiceLevel();
@@ -25,7 +23,7 @@ export default async function RescuePage() {
     );
   }
 
-  const commitments = await getRescuePlan();
+  const [commitments, tz] = await Promise.all([getRescuePlan(), getUserTimeZone()]);
   const overdueCount = commitments.filter((c) => c.status === "OVERDUE").length;
 
   return (
@@ -74,7 +72,7 @@ export default async function RescuePage() {
                   <span className="line-clamp-2 text-sm">{c.description}</span>
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                  {c.dueAt ? formatDate(c.dueAt) : "—"}
+                  {c.dueAt ? formatShortDateTime(c.dueAt, tz) : "—"}
                 </TableCell>
                 <TableCell>
                   {c.status === "OVERDUE" ? (

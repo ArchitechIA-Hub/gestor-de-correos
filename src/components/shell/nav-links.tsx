@@ -11,6 +11,7 @@ const BASE_LINKS = [
   { href: "/audit", label: "Auditoría" },
   { href: "/settings/accounts", label: "Cuentas" },
   { href: "/settings/extras", label: "Extras" },
+  { href: "/settings/general", label: "Preferencias" },
 ];
 
 export function NavLinks({ rescueModeEnabled }: { rescueModeEnabled: boolean }) {

@@ -3,12 +3,10 @@ import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { DraftResponseType } from "@/generated/prisma/enums";
+import { getUserTimeZone } from "@/lib/settings";
+import { formatLongDateTime } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-
-function formatDateTime(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 const RESPONSE_TYPE_LABELS: Record<DraftResponseType, string> = {
   AFFIRMATIVE: "Afirmativa",
@@ -32,6 +30,8 @@ export default async function SentPage() {
     include: { email: { include: { sender: true } } },
     orderBy: { approvedAt: "desc" },
   });
+
+  const tz = await getUserTimeZone();
 
   const sendEvents = await prisma.auditLogEntry.findMany({
     where: { actionType: "SEND_DRAFT", entityType: "Draft", entityId: { in: sentDrafts.map((d) => d.id) } },
@@ -70,7 +70,7 @@ export default async function SentPage() {
             {sentDrafts.map((draft) => (
               <TableRow key={draft.id}>
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {draft.approvedAt ? formatDateTime(draft.approvedAt) : "—"}
+                  {draft.approvedAt ? formatLongDateTime(draft.approvedAt, tz) : "—"}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{draft.email.sender.email}</TableCell>
                 <TableCell className="max-w-xs">

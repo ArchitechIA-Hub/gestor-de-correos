@@ -6,6 +6,8 @@ import { Bell } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { markAlertRead, markAllAlertsRead } from "@/app/actions/mark-alert-read";
+import { useTimeZone } from "@/components/providers/timezone-provider";
+import { formatShortDateTime } from "@/lib/format/date";
 
 export type UrgentAlertItem = {
   id: string;
@@ -15,13 +17,12 @@ export type UrgentAlertItem = {
   createdAt: Date;
 };
 
-function formatDueAt(d: Date | null) {
-  if (!d) return null;
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-
 export function UrgentAlertsBell({ initialAlerts }: { initialAlerts: UrgentAlertItem[] }) {
+  const timeZone = useTimeZone();
   const [alerts, setAlerts] = useState(initialAlerts);
+
+  const formatDueAt = (d: Date | null) => (d ? formatShortDateTime(d, timeZone) : null);
+
   const [isPending, startTransition] = useTransition();
   const unreadCount = alerts.length;
 

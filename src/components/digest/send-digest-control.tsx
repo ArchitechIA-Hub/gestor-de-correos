@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { setDigestRecipient } from "@/app/actions/digest-settings";
 import { sendDigest } from "@/app/actions/send-digest";
+import { useTimeZone } from "@/components/providers/timezone-provider";
+import { formatTime } from "@/lib/format/date";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,6 +24,7 @@ export function SendDigestControl({
   range: "daily" | "weekly";
   initialRecipient: string | null;
 }) {
+  const timeZone = useTimeZone();
   const [recipient, setRecipient] = useState(initialRecipient ?? "");
   const [savedRecipient, setSavedRecipient] = useState(initialRecipient);
   const [isPending, startTransition] = useTransition();
@@ -47,7 +50,7 @@ export function SendDigestControl({
       try {
         const result = await sendDigest({ range });
         setConfirmation(
-          `Enviado a ${result.recipientEmail} · ${result.sentAt.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}`
+          `Enviado a ${result.recipientEmail} · ${formatTime(result.sentAt, timeZone)}`
         );
         setOpen(false);
       } catch {

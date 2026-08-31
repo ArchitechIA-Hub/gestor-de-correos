@@ -7,12 +7,10 @@ import { getRecentWhatsAppNotifications } from "@/lib/whatsapp";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
 import { VIP_SLA_HOURS } from "@/lib/priority/constants";
 import { Badge } from "@/components/ui/badge";
+import { getUserTimeZone } from "@/lib/settings";
+import { formatShortDateTime } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 export default async function PanelPage() {
   const config = await getExtraConfig();
@@ -51,6 +49,8 @@ export default async function PanelPage() {
     config.calendarEnabled ? getUpcomingCalendarEvents() : Promise.resolve(null),
     config.whatsappEnabled ? getRecentWhatsAppNotifications() : Promise.resolve(null),
   ]);
+
+  const tz = await getUserTimeZone();
 
   return (
     <div className="flex flex-col gap-8">
@@ -121,7 +121,7 @@ export default async function PanelPage() {
               <li key={event.id} className="rounded-lg border border-border bg-card p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-foreground">{event.title}</span>
-                  <span className="text-xs text-muted-foreground">{formatDate(event.start)}</span>
+                  <span className="text-xs text-muted-foreground">{formatShortDateTime(event.start, tz)}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {event.commitment.email.sender.name} · {event.commitment.email.subject}
@@ -143,7 +143,7 @@ export default async function PanelPage() {
               <li key={notification.id} className="rounded-lg border border-border bg-card p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-foreground">{notification.message}</span>
-                  <span className="text-xs text-muted-foreground">{formatDate(notification.sentAt)}</span>
+                  <span className="text-xs text-muted-foreground">{formatShortDateTime(notification.sentAt, tz)}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {notification.commitment.email.sender.name} · {notification.commitment.email.subject}

@@ -239,6 +239,7 @@ model UrgentAlert {
 model AppSettings {
   id                  String   @id @default(cuid())
   digestRecipientEmail String?
+  timeZone            String   @default("America/Bogota")
   updatedAt           DateTime @updatedAt
 }
 

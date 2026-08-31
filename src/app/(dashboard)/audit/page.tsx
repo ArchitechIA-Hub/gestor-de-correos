@@ -2,12 +2,10 @@ import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RevertButton } from "@/components/audit/revert-button";
+import { getUserTimeZone } from "@/lib/settings";
+import { formatShortDateTime } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-
-function formatDateTime(d: Date) {
-  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 const ACTION_LABELS: Record<string, string> = {
   CLASSIFY: "Clasificación",
@@ -30,10 +28,13 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 export default async function AuditPage() {
-  const entries = await prisma.auditLogEntry.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 100,
-  });
+  const [entries, tz] = await Promise.all([
+    prisma.auditLogEntry.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    getUserTimeZone(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -60,7 +61,7 @@ export default async function AuditPage() {
             {entries.map((entry) => (
               <TableRow key={entry.id}>
                 <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                  {formatDateTime(entry.createdAt)}
+                  {formatShortDateTime(entry.createdAt, tz)}
                 </TableCell>
                 <TableCell className="text-sm">{ACTION_LABELS[entry.actionType] ?? entry.actionType}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">

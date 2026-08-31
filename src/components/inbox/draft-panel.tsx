@@ -19,6 +19,8 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import type { DraftResponseType } from "@/generated/prisma/enums";
+import { useTimeZone } from "@/components/providers/timezone-provider";
+import { formatLongDateTime } from "@/lib/format/date";
 
 /** Debe coincidir con MAX_OUTGOING_ATTACHMENTS_BYTES en src/lib/gmail/send.ts. */
 const MAX_ATTACHMENTS_BYTES = 10 * 1024 * 1024;
@@ -74,6 +76,7 @@ export function DraftPanel({
   recipientEmail: string;
 }) {
   const isRealGmailAccount = mailAccountProvider === "gmail";
+  const timeZone = useTimeZone();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [generatingType, setGeneratingType] = useState<DraftResponseType | null>(null);
@@ -387,7 +390,7 @@ export function DraftPanel({
             {draft.status === "APPROVED" && (
               <p className="mt-3 text-xs text-muted-foreground">
                 {isRealGmailAccount
-                  ? `Enviado a ${recipientEmail}${draft.approvedAt ? ` el ${new Date(draft.approvedAt).toLocaleString("es-ES")}` : ""}.`
+                  ? `Enviado a ${recipientEmail}${draft.approvedAt ? ` el ${formatLongDateTime(new Date(draft.approvedAt), timeZone)}` : ""}.`
                   : "Aprobado — este prototipo no envía correos automáticamente; el envío queda fuera de alcance."}
               </p>
             )}
