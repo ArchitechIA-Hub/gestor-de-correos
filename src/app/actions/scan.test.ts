@@ -234,6 +234,22 @@ describe("scan", () => {
     expect(await prisma.email.count({ where: { status: "UNCLASSIFIED" } })).toBe(5);
   });
 
+  it("respeta el limit pedido y lo recorta a [1, SCAN_BATCH_SIZE]", async () => {
+    for (let i = 0; i < 25; i++) {
+      await seedUnclassifiedEmail({ index: i });
+    }
+    mockedExtractCommitments.mockResolvedValue({
+      summary: "Resumen de prueba.",
+      isMarketing: false,
+      marketingReason: null,
+      commitments: [],
+    });
+
+    expect((await scan({ limit: 5 })).scanned).toBe(5);
+    expect((await scan({ limit: 0 })).scanned).toBe(1);
+    expect((await scan({ limit: 999 })).scanned).toBe(19); // quedaban 25 - 5 - 1 = 19, tope 20
+  });
+
   it("marca un compromiso como OVERDUE si su fecha ya pasó al momento de detectarlo", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({

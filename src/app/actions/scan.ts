@@ -11,7 +11,7 @@ import { sendWhatsAppNotification } from "@/lib/whatsapp";
 import { getExtraConfig } from "@/lib/extras";
 import { getUserTimeZone } from "@/lib/settings";
 import { parseDueDate } from "@/lib/ai/parse-due-date";
-import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
+import { SCAN_BATCH_SIZE, MIN_SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 
 export type ScanResult = {
   scanned: number;
@@ -28,6 +28,11 @@ export type ScanOptions = {
    * filtro, el comportamiento es el de siempre: lote global por antigüedad.
    */
   mailAccountId?: string;
+  /**
+   * Cuántos correos procesar en esta pasada. Se recorta a
+   * [MIN_SCAN_BATCH_SIZE, SCAN_BATCH_SIZE]; por defecto SCAN_BATCH_SIZE.
+   */
+  limit?: number;
 };
 
 /**
@@ -40,6 +45,9 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
   const extraConfig = await getExtraConfig();
   const timeZone = await getUserTimeZone();
 
+  const requestedLimit = Number.isFinite(options.limit) ? Math.floor(options.limit!) : SCAN_BATCH_SIZE;
+  const batchSize = Math.min(SCAN_BATCH_SIZE, Math.max(MIN_SCAN_BATCH_SIZE, requestedLimit));
+
   const unclassified = await prisma.email.findMany({
     where: {
       status: "UNCLASSIFIED",
@@ -47,7 +55,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
     },
     include: { sender: true },
     orderBy: { receivedAt: "asc" },
-    take: SCAN_BATCH_SIZE,
+    take: batchSize,
   });
 
   let commitmentsDetected = 0;
