@@ -10,23 +10,30 @@ Regla de resumen (aplica siempre, sin importar si es marketing o no):
 - Genera "summary": 1-2 frases en lenguaje natural sobre qué dice y qué pide el remitente.
 - Ignora firmas, pies de página legales, avisos de cancelación de suscripción, enlaces de tracking y demás relleno — quédate solo con el contenido real.
 
-Reglas de clasificación de marketing:
-- Marca isMarketing como true si el correo es una newsletter, boletín informativo, promoción, oferta comercial, publicidad, invitación masiva a evento genérico, u otro contenido masivo que no requiere acción personal del destinatario.
-- No marques como marketing un correo de un colega, cliente, proveedor o socio que te pida algo, te informe de un compromiso, o requiera una respuesta personal, aunque mencione productos u ofertas dentro del contexto de una relación de negocio real.
-- Si isMarketing es true, no reportes compromisos: la lista "commitments" debe quedar vacía y marketingReason debe explicar brevemente por qué se clasificó así.
-- Si isMarketing es false, marketingReason debe ser null.
+Reglas de clasificación de marketing / ruido no accionable:
+- Marca isMarketing como true si el correo es contenido masivo o automático que el destinatario no necesita revisar ni accionar personalmente. Incluye, entre otros:
+  · newsletters, boletines, promociones, ofertas comerciales, publicidad, invitaciones masivas a eventos genéricos;
+  · notificaciones automáticas transaccionales o de servicio cuando todo transcurrió con normalidad: confirmaciones de pago o transferencia, recibos, comprobantes, alertas de inicio de sesión, extractos, avisos de envío o entrega, notificaciones de redes sociales o de plataformas;
+  · prospección comercial en frío: un remitente con el que NO tienes una relación de trabajo ya establecida que se presenta a sí mismo o a su empresa, describe su producto o servicio, propone "explorar formas de colaborar" o comparte un enlace para agendar, sin un proyecto, pedido o acuerdo concreto que ya exista entre ambos.
+- NO marques como marketing un correo de una persona con la que SÍ tienes una relación de trabajo real (colega, cliente, proveedor, socio, jefe) que te pide algo concreto, te informa de un compromiso o requiere tu respuesta personal, aunque mencione productos u ofertas.
+- Notificación automática que reporta un problema real (bloqueo de cuenta, actividad fraudulenta detectada, pago rechazado, acción requerida para no perder un servicio): eso NO es marketing.
+- Ante la duda entre "prospección en frío" y "contacto de un socio real": si el correo no hace referencia a un trabajo, proyecto o acuerdo concreto que ya exista entre ambos, trátalo como prospección (isMarketing true).
+- Si isMarketing es true: "commitments" debe quedar vacía y marketingReason explica brevemente el motivo. Si isMarketing es false: marketingReason = null.
 
 Reglas de extracción de compromisos (solo aplican cuando isMarketing es false):
-- Detecta cualquier compromiso, promesa o fecha límite mencionada explícita o implícitamente en el cuerpo del correo, sin importar en qué parte del texto aparezca.
+- Un "compromiso" es una acción concreta que TÚ (el destinatario) acordaste, prometiste, o que se espera o se exige de ti — con o sin fecha límite. Detéctalos en el texto libre, en cualquier parte del hilo.
+- NO son compromisos y NO deben reportarse:
+  · Acciones condicionales: "si no reconoces la operación, comunícate…", "en caso de dudas, escríbenos…", "si algo no cuadra, avísanos".
+  · Acciones opcionales o simples sugerencias: "puedes crear una cuenta", "si te interesa, agendemos", "no dudes en escribir", "cuando quieras".
+  · Llamadas a la acción genéricas de correos promocionales, boletines o de prospección.
+  · Texto de aviso o legal automático de notificaciones (bancos, plataformas): nunca genera compromisos.
 - Resuelve fechas relativas ("para el viernes", "en 15 días", "antes de mañana") contra la fecha de recepción del correo que se te indicará.
 - Devuelve "dueDateISO" en ISO 8601 CON desfase horario explícito de la zona del usuario (p. ej. "2026-09-01T17:00:00-05:00"). Nunca sin desfase ni en UTC ("Z"), salvo que el correo indique explícitamente otra zona.
-- Si una fecha es ambigua o no se puede resolver con certeza, aún así repórtala con confidence "LOW" y dueDateISO en tu mejor estimación, o null si es imposible de estimar.
-- Si el correo no contiene ningún compromiso ni fecha límite, responde con una lista vacía.
-- No inventes compromisos que no estén sustentados por el texto del correo.
-- Regla explícita para invitaciones de calendario/reunión (Google Calendar, Outlook, Zoom, Meet
-  y similares): el evento en sí SIEMPRE cuenta como compromiso con fecha límite, sin excepción —
-  repórtalo en "commitments" con dueDateISO igual a la fecha/hora de inicio del evento, incluso si
-  la asistencia es "opcional" o el resumen ya menciona esa misma fecha. No lo omitas.`;
+- Si NO hay una fecha concreta identificable —incluye expresiones vagas como "lo antes posible", "pronto", "a la brevedad", "cuando puedas"—: dueDateISO = null. NUNCA uses la fecha de recepción del correo como fecha límite.
+- confidence: HIGH si la fecha es explícita e inequívoca; LOW si es muy ambigua.
+- Si el correo no contiene ningún compromiso real, responde con una lista vacía. No inventes compromisos que no estén sustentados por el texto.
+- Invitaciones de calendario/reunión con fecha y hora YA fijadas (Google Calendar, Outlook, Zoom, Meet, .ics, "te invito a la reunión del martes 3 a las 10"): el evento SIEMPRE cuenta como compromiso, sin excepción — repórtalo con dueDateISO igual a la fecha/hora de inicio del evento, aunque la asistencia sea "opcional" o el resumen ya mencione esa fecha. No lo omitas.
+- PERO un simple enlace para agendar sin hora fijada ("agendemos", "aquí está mi Calendly", "reserva cuando puedas") NO es una invitación de calendario ni un compromiso.`;
 
 export type ExtractCommitmentsInput = {
   subject: string;
