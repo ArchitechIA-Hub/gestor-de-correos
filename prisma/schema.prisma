@@ -29,6 +29,9 @@ model Sender {
   isVip        Boolean  @default(false)
   vipReason    String?
   organization String?
+  // Regla fija de categoría para este remitente (p. ej. "FINANZAS"): si está
+  // puesta, scan() la aplica sin depender de la IA. null = sin regla.
+  autoCategory String?
   createdAt    DateTime @default(now())
 
   emails Email[]
@@ -56,6 +59,9 @@ model Email {
   isUrgent        Boolean     @default(false)
   isMarketing     Boolean     @default(false)
   marketingReason String?
+  // Categoría temática ortogonal al status. Único valor por ahora: "FINANZAS"
+  // (correos de bancos / pagos, que viven en su propia vista). null = bandeja normal.
+  category        String?
   classifiedAt    DateTime?
   readAt          DateTime?
   respondedAt     DateTime?
@@ -157,6 +163,7 @@ enum AuditActionType {
   SEND_DIGEST
   REVERT
   MARK_MARKETING
+  CATEGORIZE
   MANAGE_MAIL_ACCOUNT
   UPDATE_COMMITMENT_STATUS
   CREATE_URGENT_ALERT

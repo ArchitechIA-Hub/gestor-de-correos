@@ -18,7 +18,11 @@ export async function revertAuditEvent(auditLogEntryId: string) {
   switch (entry.actionType) {
     case "CLASSIFY":
     case "MARK_URGENT":
-    case "MARK_MARKETING": {
+    case "MARK_MARKETING":
+    case "CATEGORIZE": {
+      // Restaura el estado del correo. NO revierte Sender.autoCategory ni el
+      // backfill de "…y siempre este remitente" — eso se quita con "Sacar de
+      // Finanzas" + "quitar la regla".
       if (before) {
         await prisma.email.update({ where: { id: entry.entityId }, data: before });
       }

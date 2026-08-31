@@ -5,9 +5,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScanButton } from "@/components/inbox/scan-button";
 import { UnmarkMarketingButton } from "@/components/inbox/unmark-marketing-button";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
+import { RemoveFromFinanzasButton } from "@/components/inbox/finanzas-buttons";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getActiveMailAccounts } from "@/lib/mail-accounts";
 import { getUserTimeZone } from "@/lib/settings";
+import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
 import { formatShortDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +31,7 @@ export default async function InboxPage({
 }) {
   const { account: accountId, view, read } = await searchParams;
   const isMarketingView = view === "marketing";
+  const isFinanzasView = view === "finanzas";
 
   const [{ backlogCount }, accounts, tz] = await Promise.all([
     getCurrentServiceLevel(),
@@ -53,7 +56,13 @@ export default async function InboxPage({
         take: 50,
       })
     : await prisma.email.findMany({
-        where: { status: "CLASSIFIED", isMarketing: false, ...accountFilter, ...readFilter },
+        where: {
+          status: "CLASSIFIED",
+          isMarketing: false,
+          category: isFinanzasView ? EMAIL_CATEGORY_FINANZAS : null,
+          ...accountFilter,
+          ...readFilter,
+        },
         include: {
           sender: true,
           mailAccount: true,
@@ -110,10 +119,21 @@ export default async function InboxPage({
               href={buildHref({ account: accountId, view: "priorizados", read })}
               className={cn(
                 "rounded-md px-2 py-1.5",
-                !isMarketingView ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
+                !isMarketingView && !isFinanzasView
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-secondary/60"
               )}
             >
               Priorizados
+            </Link>
+            <Link
+              href={buildHref({ account: accountId, view: "finanzas", read })}
+              className={cn(
+                "rounded-md px-2 py-1.5",
+                isFinanzasView ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
+              )}
+            >
+              Finanzas
             </Link>
             <Link
               href={buildHref({ account: accountId, view: "marketing", read })}
@@ -253,6 +273,12 @@ export default async function InboxPage({
                         )}
                         {email.respondedAt && <Badge variant="secondary">Respondido</Badge>}
                         <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
+                        {isFinanzasView && (
+                          <RemoveFromFinanzasButton
+                            emailId={email.id}
+                            hasSenderRule={email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS}
+                          />
+                        )}
                       </div>
                     )}
                   </TableCell>
@@ -264,11 +290,13 @@ export default async function InboxPage({
                 <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                   {isMarketingView
                     ? "No hay correos de marketing ignorados en este momento."
-                    : read === "unread"
-                      ? "No hay correos sin leer."
-                      : read === "read"
-                        ? "No hay correos leídos."
-                        : "Todavía no hay correos clasificados. Escanea el backlog para empezar."}
+                    : isFinanzasView
+                      ? "No hay correos en Finanzas."
+                      : read === "unread"
+                        ? "No hay correos sin leer."
+                        : read === "read"
+                          ? "No hay correos leídos."
+                          : "Todavía no hay correos clasificados. Escanea el backlog para empezar."}
                 </TableCell>
               </TableRow>
             )}

@@ -13,12 +13,17 @@ Regla de resumen (aplica siempre, sin importar si es marketing o no):
 Reglas de clasificación de marketing / ruido no accionable:
 - Marca isMarketing como true si el correo es contenido masivo o automático que el destinatario no necesita revisar ni accionar personalmente. Incluye, entre otros:
   · newsletters, boletines, promociones, ofertas comerciales, publicidad, invitaciones masivas a eventos genéricos;
-  · notificaciones automáticas transaccionales o de servicio cuando todo transcurrió con normalidad: confirmaciones de pago o transferencia, recibos, comprobantes, alertas de inicio de sesión, extractos, avisos de envío o entrega, notificaciones de redes sociales o de plataformas;
+  · notificaciones automáticas de servicio cuando todo transcurrió con normalidad: avisos de envío o entrega, notificaciones de redes sociales o de plataformas;
   · prospección comercial en frío: un remitente con el que NO tienes una relación de trabajo ya establecida que se presenta a sí mismo o a su empresa, describe su producto o servicio, propone "explorar formas de colaborar" o comparte un enlace para agendar, sin un proyecto, pedido o acuerdo concreto que ya exista entre ambos.
+- Las notificaciones de bancos, tarjetas y apps de pago NO son isMarketing (aunque sean transaccionales): van en category FINANZAS (ver abajo). Excepción: un correo puramente promocional de un banco (oferta de tarjeta nueva, seguro, préstamo) sí es isMarketing.
 - NO marques como marketing un correo de una persona con la que SÍ tienes una relación de trabajo real (colega, cliente, proveedor, socio, jefe) que te pide algo concreto, te informa de un compromiso o requiere tu respuesta personal, aunque mencione productos u ofertas.
 - Notificación automática que reporta un problema real (bloqueo de cuenta, actividad fraudulenta detectada, pago rechazado, acción requerida para no perder un servicio): eso NO es marketing.
 - Ante la duda entre "prospección en frío" y "contacto de un socio real": si el correo no hace referencia a un trabajo, proyecto o acuerdo concreto que ya exista entre ambos, trátalo como prospección (isMarketing true).
 - Si isMarketing es true: "commitments" debe quedar vacía y marketingReason explica brevemente el motivo. Si isMarketing es false: marketingReason = null.
+
+Regla de categoría FINANZAS:
+- Devuelve category "FINANZAS" cuando el correo es de una entidad financiera (banco, tarjeta de crédito/débito, billetera o app de pagos): confirmación o aviso de movimiento de dinero, transferencia enviada o recibida, pago, compra con tarjeta, extracto o resumen de cuenta, alerta de inicio de sesión en la app del banco, o aviso de vencimiento de un pago. En cualquier otro caso category = null.
+- category es INDEPENDIENTE de isMarketing y de los compromisos: un aviso de "tu tarjeta vence el 30" va con category FINANZAS Y con su compromiso y fecha límite. Una confirmación de transferencia va con category FINANZAS, isMarketing false y sin compromisos.
 
 Reglas de extracción de compromisos (solo aplican cuando isMarketing es false):
 - Un "compromiso" es una acción concreta que TÚ (el destinatario) acordaste, prometiste, o que se espera o se exige de ti — con o sin fecha límite. Detéctalos en el texto libre, en cualquier parte del hilo.

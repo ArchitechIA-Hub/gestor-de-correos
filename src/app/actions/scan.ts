@@ -11,7 +11,7 @@ import { sendWhatsAppNotification } from "@/lib/whatsapp";
 import { getExtraConfig } from "@/lib/extras";
 import { getUserTimeZone } from "@/lib/settings";
 import { parseDueDate } from "@/lib/ai/parse-due-date";
-import { SCAN_BATCH_SIZE, MIN_SCAN_BATCH_SIZE } from "@/lib/scan/constants";
+import { SCAN_BATCH_SIZE, MIN_SCAN_BATCH_SIZE, EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
 
 export type ScanResult = {
   scanned: number;
@@ -70,7 +70,13 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
       timeZone,
     });
 
-    if (extraction.isMarketing) {
+    // Regla fija del remitente > detección de la IA. Un remitente enrutado a
+    // FINANZAS por regla no se archiva como marketing aunque la IA lo diga.
+    const forcedCategory = email.sender.autoCategory ?? null;
+    const category = forcedCategory ?? extraction.category ?? null;
+    const treatAsMarketing = extraction.isMarketing && forcedCategory !== EMAIL_CATEGORY_FINANZAS;
+
+    if (treatAsMarketing) {
       marketingDetected++;
 
       const before = { status: email.status, priorityScore: email.priorityScore, isUrgent: email.isUrgent, isMarketing: email.isMarketing };
@@ -78,6 +84,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
         status: "ARCHIVED" as const,
         isMarketing: true,
         marketingReason: extraction.marketingReason,
+        category,
         summary: extraction.summary,
       };
 
@@ -151,7 +158,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
 
     await prisma.email.update({
       where: { id: email.id },
-      data: { status: "CLASSIFIED", priorityScore, isUrgent, classifiedAt: now, summary: extraction.summary },
+      data: { status: "CLASSIFIED", priorityScore, isUrgent, category, classifiedAt: now, summary: extraction.summary },
     });
 
     await recordAuditEvent({
@@ -159,7 +166,7 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
       entityType: "Email",
       entityId: email.id,
       payloadBefore: before,
-      payloadAfter: { status: "CLASSIFIED", priorityScore, isUrgent },
+      payloadAfter: { status: "CLASSIFIED", priorityScore, isUrgent, category },
     });
 
     if (isUrgent) {

@@ -40,7 +40,7 @@ export default async function DigestPage({
   const rangeEnd = new Date();
 
   const emails = await prisma.email.findMany({
-    where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false },
+    where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false, category: null },
     include: {
       sender: true,
       commitments: { orderBy: { dueAt: "asc" }, take: 1 },

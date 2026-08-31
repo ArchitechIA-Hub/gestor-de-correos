@@ -5,11 +5,13 @@ import { Separator } from "@/components/ui/separator";
 import { DraftPanel } from "@/components/inbox/draft-panel";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
 import { AutoMarkRead } from "@/components/inbox/auto-mark-read";
+import { MoveToFinanzasButton, RemoveFromFinanzasButton } from "@/components/inbox/finanzas-buttons";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getExtraConfig } from "@/lib/extras";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
 import { buildGoogleCalendarUrl } from "@/lib/calendar/links";
 import { getUserTimeZone } from "@/lib/settings";
+import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
 import { formatLongDateTime } from "@/lib/format/date";
 
 function formatFileSize(bytes: number) {
@@ -69,11 +71,25 @@ export default async function EmailThreadPage({
             {email.isUrgent && <Badge className="bg-urgent text-urgent-foreground">Urgente &lt;48h</Badge>}
             {email.respondedAt && <Badge variant="secondary">Respondido</Badge>}
           </div>
-          <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
+          <div className="flex items-center gap-2">
+            {email.category === EMAIL_CATEGORY_FINANZAS ? (
+              <RemoveFromFinanzasButton
+                emailId={email.id}
+                hasSenderRule={email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS}
+              />
+            ) : (
+              <MoveToFinanzasButton emailId={email.id} senderName={email.sender.name} />
+            )}
+            <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
+          </div>
         </div>
         <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">{email.sender.name}</span>
           {email.sender.isVip && <Badge className="bg-vip text-vip-foreground">VIP</Badge>}
+          {email.category === EMAIL_CATEGORY_FINANZAS && <Badge variant="outline">Finanzas</Badge>}
+          {email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS && (
+            <Badge variant="outline">Regla: Finanzas</Badge>
+          )}
           {vipSlaStatus === "breached" && <Badge className="bg-urgent text-urgent-foreground">SLA VIP incumplido</Badge>}
           {vipSlaStatus === "compliant" && <Badge variant="secondary">SLA VIP cumplido</Badge>}
           {email.sender.organization && <span>· {email.sender.organization}</span>}

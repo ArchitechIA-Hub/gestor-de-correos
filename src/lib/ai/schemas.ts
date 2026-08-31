@@ -9,12 +9,18 @@ export const CommitmentExtractionSchema = z.object({
   isMarketing: z
     .boolean()
     .describe(
-      "true si el correo es contenido masivo o automático no accionable que el usuario no necesita revisar: marketing, newsletter, promoción, boletín, notificación transaccional/de servicio rutinaria (confirmación de pago, recibo, alerta de login, aviso de envío), o prospección comercial en frío sin relación de trabajo previa"
+      "true si el correo es contenido masivo o automático no accionable que el usuario no necesita revisar: marketing, newsletter, promoción, boletín, invitación masiva, aviso de envío/entrega, notificación de red social, o prospección comercial en frío sin relación de trabajo previa. NO uses isMarketing para notificaciones de bancos/pagos: esas van en category FINANZAS"
     ),
   marketingReason: z
     .string()
     .nullable()
     .describe("Motivo breve de la clasificación de marketing, o null si isMarketing es false"),
+  category: z
+    .enum(["FINANZAS"])
+    .nullable()
+    .describe(
+      "\"FINANZAS\" si el correo es de una entidad financiera (banco, tarjeta, billetera/app de pagos): confirmación o aviso de movimiento de dinero, transferencia, pago, compra con tarjeta, extracto, alerta de inicio de sesión en la app del banco, o vencimiento de un pago. En cualquier otro caso null. Es independiente de isMarketing y de los compromisos."
+    ),
   commitments: z.array(
     z.object({
       description: z

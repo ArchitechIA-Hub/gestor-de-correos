@@ -12,3 +12,11 @@
  */
 export const SCAN_BATCH_SIZE = 20;
 export const MIN_SCAN_BATCH_SIZE = 1;
+
+/**
+ * Categoría temática de un correo (`Email.category`, `Sender.autoCategory`).
+ * Por ahora solo existe "FINANZAS": correos de bancos / pagos que viven en su
+ * propia vista de la bandeja en vez de mezclarse con "Priorizados".
+ */
+export const EMAIL_CATEGORY_FINANZAS = "FINANZAS";
+

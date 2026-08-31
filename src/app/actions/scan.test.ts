@@ -26,13 +26,20 @@ async function resetDb() {
   await prisma.extraConfig.deleteMany();
 }
 
-async function seedUnclassifiedEmail(overrides: { isVip?: boolean; index?: number } = {}) {
+async function seedUnclassifiedEmail(
+  overrides: { isVip?: boolean; index?: number; senderAutoCategory?: string } = {}
+) {
   const i = overrides.index ?? 0;
   const account = await prisma.mailAccount.create({
     data: { emailAddress: `cuenta${i}@test.local`, label: `Cuenta de prueba ${i}` },
   });
   const sender = await prisma.sender.create({
-    data: { email: `remitente${i}@test.local`, name: `Remitente de Prueba ${i}`, isVip: overrides.isVip ?? false },
+    data: {
+      email: `remitente${i}@test.local`,
+      name: `Remitente de Prueba ${i}`,
+      isVip: overrides.isVip ?? false,
+      autoCategory: overrides.senderAutoCategory ?? null,
+    },
   });
   return prisma.email.create({
     data: {
@@ -59,6 +66,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: true,
       marketingReason: "Newsletter promocional",
+      category: null,
       commitments: [],
     });
 
@@ -81,6 +89,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Enviar propuesta final",
@@ -113,6 +122,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Confirmar la propuesta",
@@ -146,6 +156,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Enviar el reporte mensual",
@@ -174,6 +185,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Aprobar el presupuesto",
@@ -200,6 +212,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Aprobar el presupuesto",
@@ -225,6 +238,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [],
     });
 
@@ -242,6 +256,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [],
     });
 
@@ -256,6 +271,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Entregar el informe atrasado",
@@ -279,6 +295,7 @@ describe("scan", () => {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
+      category: null,
       commitments: [
         {
           description: "Llamada de seguimiento",
@@ -295,5 +312,50 @@ describe("scan", () => {
     const commitment = await prisma.commitment.findFirstOrThrow();
     // 09:00 en Bogotá (−05:00) = 14:00 UTC
     expect(commitment.dueAt?.toISOString()).toBe("2026-09-01T14:00:00.000Z");
+  });
+
+  it("clasifica en FINANZAS cuando la IA devuelve category y sigue creando el compromiso", async () => {
+    await seedUnclassifiedEmail();
+    mockedExtractCommitments.mockResolvedValue({
+      summary: "Tu tarjeta vence pronto.",
+      isMarketing: false,
+      marketingReason: null,
+      category: "FINANZAS",
+      commitments: [
+        {
+          description: "Pagar la tarjeta de crédito",
+          dueDateISO: isoHoursFromNow(24 * 10),
+          isExplicitDate: true,
+          confidence: "HIGH",
+          sourceExcerpt: "vence el día 30",
+        },
+      ],
+    });
+
+    await scan();
+
+    const email = await prisma.email.findFirstOrThrow();
+    expect(email.status).toBe("CLASSIFIED");
+    expect(email.category).toBe("FINANZAS");
+    expect(email.isMarketing).toBe(false);
+    expect(await prisma.commitment.count()).toBe(1);
+  });
+
+  it("la regla del remitente (autoCategory FINANZAS) gana sobre la IA aunque diga marketing", async () => {
+    await seedUnclassifiedEmail({ senderAutoCategory: "FINANZAS" });
+    mockedExtractCommitments.mockResolvedValue({
+      summary: "Movimiento en tu cuenta.",
+      isMarketing: true,
+      marketingReason: "Parecía masivo",
+      category: null,
+      commitments: [],
+    });
+
+    await scan();
+
+    const email = await prisma.email.findFirstOrThrow();
+    expect(email.category).toBe("FINANZAS");
+    expect(email.isMarketing).toBe(false);
+    expect(email.status).toBe("CLASSIFIED");
   });
 });
