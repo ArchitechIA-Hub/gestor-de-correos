@@ -13,10 +13,11 @@ import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-function buildHref(params: { account?: string; view?: string }) {
+function buildHref(params: { account?: string; view?: string; read?: string }) {
   const search = new URLSearchParams();
   if (params.account) search.set("account", params.account);
   if (params.view && params.view !== "priorizados") search.set("view", params.view);
+  if (params.read) search.set("read", params.read);
   const query = search.toString();
   return `/inbox${query ? `?${query}` : ""}`;
 }
@@ -24,9 +25,9 @@ function buildHref(params: { account?: string; view?: string }) {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string; view?: string }>;
+  searchParams: Promise<{ account?: string; view?: string; read?: string }>;
 }) {
-  const { account: accountId, view } = await searchParams;
+  const { account: accountId, view, read } = await searchParams;
   const isMarketingView = view === "marketing";
 
   const [{ backlogCount }, accounts, tz] = await Promise.all([
@@ -36,6 +37,13 @@ export default async function InboxPage({
   ]);
 
   const accountFilter = accountId ? { mailAccountId: accountId } : {};
+  const readFilter = isMarketingView
+    ? {}
+    : read === "unread"
+      ? { readAt: null }
+      : read === "read"
+        ? { readAt: { not: null } }
+        : {};
 
   const emails = isMarketingView
     ? await prisma.email.findMany({
@@ -45,7 +53,7 @@ export default async function InboxPage({
         take: 50,
       })
     : await prisma.email.findMany({
-        where: { status: "CLASSIFIED", isMarketing: false, ...accountFilter },
+        where: { status: "CLASSIFIED", isMarketing: false, ...accountFilter, ...readFilter },
         include: {
           sender: true,
           mailAccount: true,
@@ -72,7 +80,7 @@ export default async function InboxPage({
           <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Cuentas</p>
           <nav className="mt-2 flex flex-row flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5">
             <Link
-              href={buildHref({ view })}
+              href={buildHref({ view, read })}
               className={cn(
                 "rounded-md px-2 py-1.5",
                 !accountId ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
@@ -83,7 +91,7 @@ export default async function InboxPage({
             {accounts.map((account) => (
               <Link
                 key={account.id}
-                href={buildHref({ account: account.id, view })}
+                href={buildHref({ account: account.id, view, read })}
                 className={cn(
                   "truncate rounded-md px-2 py-1.5 lg:max-w-full",
                   accountId === account.id
@@ -99,7 +107,7 @@ export default async function InboxPage({
           <p className="mt-5 px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Vista</p>
           <nav className="mt-2 flex flex-row flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5">
             <Link
-              href={buildHref({ account: accountId, view: "priorizados" })}
+              href={buildHref({ account: accountId, view: "priorizados", read })}
               className={cn(
                 "rounded-md px-2 py-1.5",
                 !isMarketingView ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
@@ -108,7 +116,7 @@ export default async function InboxPage({
               Priorizados
             </Link>
             <Link
-              href={buildHref({ account: accountId, view: "marketing" })}
+              href={buildHref({ account: accountId, view: "marketing", read })}
               className={cn(
                 "rounded-md px-2 py-1.5",
                 isMarketingView ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
@@ -117,6 +125,32 @@ export default async function InboxPage({
               Marketing ignorado
             </Link>
           </nav>
+
+          {!isMarketingView && (
+            <>
+              <p className="mt-5 px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Estado</p>
+              <nav className="mt-2 flex flex-row flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5">
+                {[
+                  { key: undefined, label: "Todos" },
+                  { key: "unread", label: "Sin leer" },
+                  { key: "read", label: "Leídos" },
+                ].map((opt) => (
+                  <Link
+                    key={opt.label}
+                    href={buildHref({ account: accountId, view, read: opt.key })}
+                    className={cn(
+                      "rounded-md px-2 py-1.5",
+                      (read ?? undefined) === opt.key
+                        ? "bg-secondary text-secondary-foreground"
+                        : "text-muted-foreground hover:bg-secondary/60"
+                    )}
+                  >
+                    {opt.label}
+                  </Link>
+                ))}
+              </nav>
+            </>
+          )}
         </aside>
 
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-border">
@@ -230,7 +264,11 @@ export default async function InboxPage({
                 <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
                   {isMarketingView
                     ? "No hay correos de marketing ignorados en este momento."
-                    : "Todavía no hay correos clasificados. Escanea el backlog para empezar."}
+                    : read === "unread"
+                      ? "No hay correos sin leer."
+                      : read === "read"
+                        ? "No hay correos leídos."
+                        : "Todavía no hay correos clasificados. Escanea el backlog para empezar."}
                 </TableCell>
               </TableRow>
             )}
