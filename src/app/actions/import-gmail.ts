@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { getGmailClientForAccount } from "@/lib/gmail/client";
+import { PRIMARY_INBOX_LABEL_IDS } from "@/lib/gmail/constants";
 import { parseGmailMessage } from "@/lib/gmail/parse-message";
 
 export type ImportGmailResult = {
@@ -12,7 +13,8 @@ export type ImportGmailResult = {
 };
 
 /**
- * Importa los `limit` correos más recientes del INBOX real de una cuenta
+ * Importa los `limit` correos más recientes de la pestaña **Principal**
+ * (Primary) del INBOX real de una cuenta
  * Gmail ya conectada (provider "gmail") como filas `Email` en estado
  * UNCLASSIFIED — el `scan()` existente las recoge en el siguiente ciclo,
  * igual que a los correos mock. No clasifica ni llama a IA aquí.
@@ -28,7 +30,7 @@ export async function importGmailEmails(mailAccountId: string, limit = 10): Prom
 
   const list = await gmail.users.messages.list({
     userId: "me",
-    labelIds: ["INBOX"],
+    labelIds: [...PRIMARY_INBOX_LABEL_IDS],
     maxResults: limit,
   });
 
