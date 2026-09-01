@@ -6,14 +6,17 @@ import { DraftPanel } from "@/components/inbox/draft-panel";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
 import { AutoMarkRead } from "@/components/inbox/auto-mark-read";
 import { MoveToMenu } from "@/components/inbox/move-to-menu";
+import { RevertButton } from "@/components/audit/revert-button";
 import type { InboxBucketId } from "@/lib/inbox/buckets";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getExtraConfig } from "@/lib/extras";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
 import { buildGoogleCalendarUrl } from "@/lib/calendar/links";
 import { getUserTimeZone } from "@/lib/settings";
+import { getEmailAuditTrail } from "@/lib/audit/email-trail";
+import { AUDIT_ACTION_LABELS } from "@/lib/audit/labels";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
-import { formatLongDateTime } from "@/lib/format/date";
+import { formatLongDateTime, formatShortDateTime } from "@/lib/format/date";
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -35,7 +38,7 @@ export default async function EmailThreadPage({
 }) {
   const { emailId } = await params;
 
-  const [email, { features }, extraConfig] = await Promise.all([
+  const [email, { features }, extraConfig, tz, trail] = await Promise.all([
     prisma.email.findUnique({
       where: { id: emailId },
       include: {
@@ -48,9 +51,9 @@ export default async function EmailThreadPage({
     }),
     getCurrentServiceLevel(),
     getExtraConfig(),
+    getUserTimeZone(),
+    getEmailAuditTrail(emailId),
   ]);
-
-  const tz = await getUserTimeZone();
 
   if (!email) notFound();
 
@@ -211,6 +214,44 @@ export default async function EmailThreadPage({
             recipientEmail={email.sender.email}
           />
         </div>
+      </div>
+
+      <Separator />
+
+      <div>
+        <h2 className="font-heading text-lg text-foreground">Historial de este correo</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Cada acción del sistema o tuya sobre este correo. El detalle completo (antes → después) está en Auditoría.
+        </p>
+        {trail.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">Sin acciones registradas todavía.</p>
+        ) : (
+          <ul className="mt-3 flex flex-col gap-1.5">
+            {trail.map((entry) => (
+              <li
+                key={entry.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-3 py-2 text-sm"
+              >
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  {formatShortDateTime(entry.createdAt, tz)}
+                </span>
+                <span className="font-medium text-foreground">
+                  {AUDIT_ACTION_LABELS[entry.actionType] ?? entry.actionType}
+                </span>
+                <Badge variant={entry.performedBy === "SYSTEM" ? "outline" : "secondary"}>
+                  {entry.performedBy === "SYSTEM" ? "Sistema" : "Usuario"}
+                </Badge>
+                <span className="ml-auto">
+                  {entry.revertedAt ? (
+                    <span className="text-xs text-muted-foreground">Revertido</span>
+                  ) : (
+                    <RevertButton auditLogEntryId={entry.id} disabled={!entry.reversible} />
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
