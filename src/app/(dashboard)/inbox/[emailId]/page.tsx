@@ -14,6 +14,7 @@ import { computeVipSlaStatus } from "@/lib/priority/sla";
 import { buildGoogleCalendarUrl } from "@/lib/calendar/links";
 import { getUserTimeZone } from "@/lib/settings";
 import { getEmailAuditTrail } from "@/lib/audit/email-trail";
+import { getEmailThread } from "@/lib/inbox/thread";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit/labels";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
 import { formatLongDateTime, formatShortDateTime } from "@/lib/format/date";
@@ -56,6 +57,8 @@ export default async function EmailThreadPage({
   ]);
 
   if (!email) notFound();
+
+  const thread = await getEmailThread(email.threadId, email.id);
 
   const vipSlaStatus = extraConfig.vipSlaEnabled
     ? computeVipSlaStatus({
@@ -124,6 +127,62 @@ export default async function EmailThreadPage({
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{email.rawBody}</p>
         )}
       </div>
+
+      {thread.length > 0 && (
+        <div>
+          <h2 className="font-heading text-lg text-foreground">Conversación</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {thread.length} mensajes en este hilo, del más antiguo al más reciente.
+          </p>
+          <ul className="mt-3 flex flex-col gap-2">
+            {thread.map((item) =>
+              item.kind === "received" ? (
+                <li
+                  key={item.id}
+                  className={
+                    "rounded-lg border p-3 text-sm " +
+                    (item.isCurrent ? "border-primary/40 bg-card" : "border-border bg-card")
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{item.senderName}</span>
+                    <span>{formatShortDateTime(item.at, tz)}</span>
+                  </div>
+                  <p className="mt-1.5 text-sm leading-relaxed text-foreground">
+                    {item.summary ?? item.body.slice(0, 400)}
+                  </p>
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                      Ver mensaje completo
+                    </summary>
+                    <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                      {item.body}
+                    </p>
+                  </details>
+                  {item.isCurrent ? (
+                    <p className="mt-1.5 text-xs text-primary">Este correo</p>
+                  ) : (
+                    <a
+                      href={`/inbox/${item.id}`}
+                      className="mt-1.5 inline-block text-xs text-primary underline-offset-4 hover:underline"
+                    >
+                      Abrir
+                    </a>
+                  )}
+                </li>
+              ) : (
+                <li key={item.id} className="ml-8 rounded-lg border border-border bg-secondary/40 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Tú · respuesta enviada</span>
+                    <span>{formatShortDateTime(item.at, tz)}</span>
+                  </div>
+                  <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{item.body}</p>
+                </li>
+              )
+            )}
+          </ul>
+        </div>
+      )}
 
       {email.attachments.length > 0 && (
         <div>
