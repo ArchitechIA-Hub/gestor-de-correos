@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { prisma } from "@/lib/db/prisma";
-import { moveToFinanzas, removeFromFinanzas } from "./email-category";
+import { moveToFinanzas, removeFromFinanzas, moveEmailsTo } from "./email-category";
 
 async function resetDb() {
   await prisma.whatsAppNotification.deleteMany();
@@ -93,5 +93,38 @@ describe("removeFromFinanzas", () => {
     await removeFromFinanzas(emails[0].id, true);
 
     expect((await prisma.sender.findUniqueOrThrow({ where: { id: sender.id } })).autoCategory).toBeNull();
+  });
+});
+
+describe("moveEmailsTo (selección múltiple)", () => {
+  it("mueve varios correos a finanzas de una y audita cada uno", async () => {
+    const { emails } = await seed(3);
+
+    await moveEmailsTo([emails[0].id, emails[1].id], "finanzas");
+
+    const cats = await prisma.email.findMany({ orderBy: { threadId: "asc" }, select: { category: true } });
+    expect(cats.map((c) => c.category)).toEqual(["FINANZAS", "FINANZAS", null]);
+    expect(await prisma.auditLogEntry.count({ where: { actionType: "CATEGORIZE" } })).toBe(2);
+  });
+
+  it("a marketing: archiva y limpia la urgencia; a inbox: vuelve a CLASSIFIED sin categoría", async () => {
+    const { emails } = await seed(2);
+
+    await moveEmailsTo([emails[0].id], "marketing");
+    let e = await prisma.email.findUniqueOrThrow({ where: { id: emails[0].id } });
+    expect(e.status).toBe("ARCHIVED");
+    expect(e.isMarketing).toBe(true);
+
+    await moveEmailsTo([emails[0].id], "inbox");
+    e = await prisma.email.findUniqueOrThrow({ where: { id: emails[0].id } });
+    expect(e.status).toBe("CLASSIFIED");
+    expect(e.isMarketing).toBe(false);
+    expect(e.category).toBeNull();
+  });
+
+  it("no hace nada con lista vacía", async () => {
+    await seed(1);
+    await moveEmailsTo([], "finanzas");
+    expect(await prisma.auditLogEntry.count()).toBe(0);
   });
 });

@@ -1,16 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScanButton } from "@/components/inbox/scan-button";
-import { UnmarkMarketingButton } from "@/components/inbox/unmark-marketing-button";
-import { MarkReadButton } from "@/components/inbox/mark-read-button";
-import { RemoveFromFinanzasButton } from "@/components/inbox/finanzas-buttons";
+import { InboxTable, type InboxRow } from "@/components/inbox/inbox-table";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getActiveMailAccounts } from "@/lib/mail-accounts";
 import { getUserTimeZone } from "@/lib/settings";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
-import { formatShortDateTime } from "@/lib/format/date";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +66,34 @@ export default async function InboxPage({
         orderBy: [{ priorityScore: "desc" }, { receivedAt: "desc" }],
         take: 50,
       });
+
+  const rows: InboxRow[] = emails.map((e) => {
+    const commitments = (e as { commitments?: { description: string; dueAt: Date | null }[] }).commitments;
+    return {
+      id: e.id,
+      subject: e.subject,
+      receivedAt: e.receivedAt,
+      readAt: e.readAt,
+      respondedAt: e.respondedAt,
+      isUrgent: e.isUrgent,
+      isMarketing: e.isMarketing,
+      marketingReason: e.marketingReason,
+      priorityScore: e.priorityScore,
+      sender: { name: e.sender.name, isVip: e.sender.isVip, organization: e.sender.organization },
+      mailAccount: { label: e.mailAccount.label },
+      commitments: commitments?.map((c) => ({ description: c.description, dueAt: c.dueAt })),
+    };
+  });
+
+  const emptyMessage = isMarketingView
+    ? "No hay correos de marketing ignorados en este momento."
+    : isFinanzasView
+      ? "No hay correos en Finanzas."
+      : read === "unread"
+        ? "No hay correos sin leer."
+        : read === "read"
+          ? "No hay correos leídos."
+          : "Todavía no hay correos clasificados. Escanea el backlog para empezar.";
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,137 +196,7 @@ export default async function InboxPage({
           )}
         </aside>
 
-        <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-border">
-        <div className="max-h-[calc(100vh-260px)] overflow-y-auto">
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-card">
-            <TableRow>
-              <TableHead className="w-6 py-2" />
-              <TableHead className="py-2 text-xs">Remitente</TableHead>
-              <TableHead className="py-2 text-xs">Cuenta</TableHead>
-              <TableHead className="py-2 text-xs">Asunto</TableHead>
-              {isMarketingView ? (
-                <TableHead className="py-2 text-xs">Motivo</TableHead>
-              ) : (
-                <TableHead className="py-2 text-xs">Compromiso</TableHead>
-              )}
-              <TableHead className="py-2 text-xs">Recibido</TableHead>
-              <TableHead className="py-2 text-right text-xs whitespace-nowrap">{isMarketingView ? "" : "Prioridad"}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {emails.map((email) => {
-              const nearest = isMarketingView
-                ? undefined
-                : (email as unknown as { commitments: { description: string; dueAt: Date | null }[] }).commitments[0];
-              const isUnread = !isMarketingView && !email.readAt;
-              return (
-                <TableRow key={email.id} className={isMarketingView ? undefined : "cursor-pointer"}>
-                  <TableCell className="py-1.5 pr-0 pl-3 align-middle">
-                    {isUnread && (
-                      <span className="block size-2 rounded-full bg-primary" aria-label="No leído" />
-                    )}
-                  </TableCell>
-                  <TableCell className="py-1.5">
-                    <Link href={`/inbox/${email.id}`} className="block">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "text-sm",
-                            isUnread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
-                          )}
-                        >
-                          {email.sender.name}
-                        </span>
-                        {email.sender.isVip && (
-                          <Badge className="bg-vip text-vip-foreground">VIP</Badge>
-                        )}
-                      </div>
-                      {email.sender.organization && (
-                        <span className="text-xs text-muted-foreground">{email.sender.organization}</span>
-                      )}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap py-1.5 text-xs text-muted-foreground">
-                    {email.mailAccount.label}
-                  </TableCell>
-                  <TableCell className="py-1.5">
-                    <Link
-                      href={`/inbox/${email.id}`}
-                      className={cn(
-                        "line-clamp-1 block max-w-2xs text-sm",
-                        isUnread ? "font-bold text-foreground" : "text-muted-foreground"
-                      )}
-                    >
-                      {email.subject}
-                    </Link>
-                  </TableCell>
-                  {isMarketingView ? (
-                    <TableCell className="max-w-2xs py-1.5">
-                      <span className="line-clamp-2 text-xs text-muted-foreground">
-                        {email.marketingReason ?? "—"}
-                      </span>
-                    </TableCell>
-                  ) : (
-                    <TableCell className="max-w-2xs py-1.5">
-                      {nearest ? (
-                        <div className="flex flex-col">
-                          <span className="line-clamp-1 text-xs">{nearest.description}</span>
-                          {nearest.dueAt && (
-                            <span className="text-xs text-muted-foreground">Vence {formatShortDateTime(nearest.dueAt, tz)}</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                  )}
-                  <TableCell className="whitespace-nowrap py-1.5 text-xs text-muted-foreground">
-                    {formatShortDateTime(email.receivedAt, tz)}
-                  </TableCell>
-                  <TableCell className="py-1.5 text-right whitespace-nowrap">
-                    {isMarketingView ? (
-                      <UnmarkMarketingButton emailId={email.id} />
-                    ) : (
-                      <div className="flex flex-col items-end gap-1.5">
-                        {email.isUrgent ? (
-                          <Badge className="bg-urgent text-urgent-foreground">Urgente &lt;48h</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">{email.priorityScore.toFixed(2)}</span>
-                        )}
-                        {email.respondedAt && <Badge variant="secondary">Respondido</Badge>}
-                        <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
-                        {isFinanzasView && (
-                          <RemoveFromFinanzasButton
-                            emailId={email.id}
-                            hasSenderRule={email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS}
-                          />
-                        )}
-                      </div>
-                    )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {emails.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  {isMarketingView
-                    ? "No hay correos de marketing ignorados en este momento."
-                    : isFinanzasView
-                      ? "No hay correos en Finanzas."
-                      : read === "unread"
-                        ? "No hay correos sin leer."
-                        : read === "read"
-                          ? "No hay correos leídos."
-                          : "Todavía no hay correos clasificados. Escanea el backlog para empezar."}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-        </div>
-        </div>
+        <InboxTable emails={rows} view={view} tz={tz} emptyMessage={emptyMessage} />
       </div>
     </div>
   );

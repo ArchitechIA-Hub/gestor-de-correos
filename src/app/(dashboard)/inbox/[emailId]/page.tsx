@@ -5,7 +5,8 @@ import { Separator } from "@/components/ui/separator";
 import { DraftPanel } from "@/components/inbox/draft-panel";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
 import { AutoMarkRead } from "@/components/inbox/auto-mark-read";
-import { MoveToFinanzasButton, RemoveFromFinanzasButton } from "@/components/inbox/finanzas-buttons";
+import { MoveToMenu } from "@/components/inbox/move-to-menu";
+import type { InboxBucketId } from "@/lib/inbox/buckets";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getExtraConfig } from "@/lib/extras";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
@@ -72,14 +73,21 @@ export default async function EmailThreadPage({
             {email.respondedAt && <Badge variant="secondary">Respondido</Badge>}
           </div>
           <div className="flex items-center gap-2">
-            {email.category === EMAIL_CATEGORY_FINANZAS ? (
-              <RemoveFromFinanzasButton
-                emailId={email.id}
-                hasSenderRule={email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS}
-              />
-            ) : (
-              <MoveToFinanzasButton emailId={email.id} senderName={email.sender.name} />
-            )}
+            <MoveToMenu
+              emailIds={[email.id]}
+              currentBucket={
+                (email.category === EMAIL_CATEGORY_FINANZAS
+                  ? "finanzas"
+                  : email.isMarketing
+                    ? "marketing"
+                    : "inbox") as InboxBucketId
+              }
+              sender={{
+                id: email.senderId,
+                name: email.sender.name,
+                hasFinanzasRule: email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS,
+              }}
+            />
             <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
           </div>
         </div>

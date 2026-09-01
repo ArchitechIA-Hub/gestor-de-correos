@@ -5,11 +5,69 @@ import { prisma } from "@/lib/db/prisma";
 import { computePriorityScore, isUrgentByDeadline } from "@/lib/priority/engine";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
+import { getBucket, type InboxBucketId } from "@/lib/inbox/buckets";
 
 function revalidate() {
   revalidatePath("/inbox");
   revalidatePath("/digest");
   revalidatePath("/audit");
+}
+
+/**
+ * Mueve uno o varios correos a un bucket de la bandeja (inbox / finanzas /
+ * marketing). Es la acción detrás del menú "Mover a" y de la selección
+ * múltiple. Para la regla "…y siempre este remitente" con arrastre, usar
+ * `moveToFinanzas(id, true)`.
+ */
+export async function moveEmailsTo(emailIds: string[], bucketId: InboxBucketId) {
+  if (emailIds.length === 0) return;
+  const bucket = getBucket(bucketId);
+  const now = new Date();
+
+  const emails = await prisma.email.findMany({
+    where: { id: { in: emailIds } },
+    include: { sender: true },
+  });
+
+  for (const email of emails) {
+    const before = {
+      status: email.status,
+      category: email.category,
+      isMarketing: email.isMarketing,
+      marketingReason: email.marketingReason,
+      priorityScore: email.priorityScore,
+      isUrgent: email.isUrgent,
+    };
+
+    const due = bucket.isMarketing ? null : await nearestDueAt(email.id);
+    const priorityScore = computePriorityScore(
+      { id: email.id, receivedAt: email.receivedAt, isVip: email.sender.isVip, nearestDueAt: due },
+      now
+    );
+    const isUrgent = isUrgentByDeadline(due, now);
+
+    const after = {
+      status: bucket.isMarketing ? ("ARCHIVED" as const) : ("CLASSIFIED" as const),
+      category: bucket.category,
+      isMarketing: bucket.isMarketing,
+      marketingReason: bucket.isMarketing ? "Movido manualmente a marketing" : null,
+      priorityScore,
+      isUrgent,
+    };
+
+    await prisma.email.update({ where: { id: email.id }, data: after });
+
+    await recordAuditEvent({
+      actionType: "CATEGORIZE",
+      entityType: "Email",
+      entityId: email.id,
+      payloadBefore: before,
+      payloadAfter: { bucket: bucketId, ...after },
+      performedBy: "USER",
+    });
+  }
+
+  revalidate();
 }
 
 async function nearestDueAt(emailId: string): Promise<Date | null> {
