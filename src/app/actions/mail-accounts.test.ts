@@ -6,7 +6,13 @@ import { prisma } from "@/lib/db/prisma";
 import { renameMailAccount } from "./mail-accounts";
 
 async function resetDb() {
+  await prisma.whatsAppNotification.deleteMany();
+  await prisma.calendarEvent.deleteMany();
+  await prisma.urgentAlert.deleteMany();
   await prisma.auditLogEntry.deleteMany();
+  await prisma.draft.deleteMany();
+  await prisma.commitment.deleteMany();
+  await prisma.emailAttachment.deleteMany();
   await prisma.email.deleteMany();
   await prisma.sender.deleteMany();
   await prisma.mailAccount.deleteMany();
