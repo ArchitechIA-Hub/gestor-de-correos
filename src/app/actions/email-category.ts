@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { computePriorityScore, isUrgentByDeadline } from "@/lib/priority/engine";
+import { getNearestOpenCommitment } from "@/lib/priority/nearest-commitment";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
 import { getBucket, type InboxBucketId } from "@/lib/inbox/buckets";
@@ -39,7 +40,7 @@ export async function moveEmailsTo(emailIds: string[], bucketId: InboxBucketId) 
       isUrgent: email.isUrgent,
     };
 
-    const due = bucket.isMarketing ? null : await nearestDueAt(email.id);
+    const due = bucket.isMarketing ? null : (await getNearestOpenCommitment(email.id))?.dueAt ?? null;
     const priorityScore = computePriorityScore(
       { id: email.id, receivedAt: email.receivedAt, isVip: email.sender.isVip, nearestDueAt: due },
       now
@@ -70,14 +71,6 @@ export async function moveEmailsTo(emailIds: string[], bucketId: InboxBucketId) 
   revalidate();
 }
 
-async function nearestDueAt(emailId: string): Promise<Date | null> {
-  const c = await prisma.commitment.findFirst({
-    where: { emailId, status: { in: ["PENDING", "OVERDUE"] }, dueAt: { not: null } },
-    orderBy: { dueAt: "asc" },
-  });
-  return c?.dueAt ?? null;
-}
-
 /**
  * Mueve un correo a la vista "Finanzas". Si `alsoSender`, además fija la regla
  * `Sender.autoCategory` y arrastra los otros correos ya clasificados de ese
@@ -98,7 +91,7 @@ export async function moveToFinanzas(emailId: string, alsoSender = false) {
     isUrgent: email.isUrgent,
   };
 
-  const due = email.status === "ARCHIVED" ? null : await nearestDueAt(emailId);
+  const due = email.status === "ARCHIVED" ? null : (await getNearestOpenCommitment(emailId))?.dueAt ?? null;
   const priorityScore = computePriorityScore(
     { id: email.id, receivedAt: email.receivedAt, isVip: email.sender.isVip, nearestDueAt: due },
     now
@@ -152,7 +145,7 @@ export async function removeFromFinanzas(emailId: string, alsoClearSenderRule = 
   const now = new Date();
   const before = { category: email.category, priorityScore: email.priorityScore, isUrgent: email.isUrgent };
 
-  const due = await nearestDueAt(emailId);
+  const due = (await getNearestOpenCommitment(emailId))?.dueAt ?? null;
   const priorityScore = computePriorityScore(
     { id: email.id, receivedAt: email.receivedAt, isVip: email.sender.isVip, nearestDueAt: due },
     now

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { sendGmailReply, type OutgoingAttachment } from "@/lib/gmail/send";
+import { getNearestOpenCommitment } from "@/lib/priority/nearest-commitment";
+import { recomputeEmailPriority } from "@/lib/priority/recompute-email";
 
 /**
  * Aprobación humana explícita de un borrador. Para cuentas conectadas por
@@ -71,6 +73,24 @@ export async function approveDraft(draftId: string, attachments: OutgoingAttachm
     performedBy: "USER",
     reversible: false,
   });
+
+  // Responder a un correo es la señal más directa de que su compromiso ya se
+  // atendió: se auto-completa el más próximo abierto, sin que el usuario
+  // tenga que acordarse de marcarlo aparte. Queda auditado como acción del
+  // sistema y es reversible, igual que si lo marcara a mano.
+  const nearest = await getNearestOpenCommitment(draft.emailId);
+  if (nearest) {
+    await prisma.commitment.update({ where: { id: nearest.id }, data: { status: "COMPLETED" } });
+    await recomputeEmailPriority(draft.emailId, respondedAt);
+    await recordAuditEvent({
+      actionType: "UPDATE_COMMITMENT_STATUS",
+      entityType: "Commitment",
+      entityId: nearest.id,
+      payloadBefore: { status: nearest.status },
+      payloadAfter: { status: "COMPLETED", reason: "respuesta enviada" },
+      performedBy: "SYSTEM",
+    });
+  }
 
   revalidatePath(`/inbox/${updated.emailId}`);
   revalidatePath("/inbox");

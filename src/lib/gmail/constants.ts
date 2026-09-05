@@ -1,9 +1,13 @@
 /**
- * Gmail aplica AND entre varios labelIds. INBOX + CATEGORY_PERSONAL = solo la
- * pestaña "Principal" (Primary): excluye Promociones / Social / Notificaciones /
- * Foros, que también llevan INBOX.
+ * Gmail aplica AND entre varios labelIds, así que "Principal o Actualizaciones"
+ * no se puede expresar como labelIds (ambas categorías son mutuamente
+ * excluyentes por diseño de Gmail). Se usa como query de búsqueda (`q`) junto
+ * con labelIds: ["INBOX"], que sí admite OR — así entran los correos
+ * transaccionales/financieros (bancos, pasarelas de pago) que Gmail suele
+ * clasificar como "Actualizaciones" en vez de "Principal", sin abrir la puerta
+ * a Promociones / Social / Foros.
  */
-export const PRIMARY_INBOX_LABEL_IDS = ["INBOX", "CATEGORY_PERSONAL"] as const;
+export const PRIMARY_OR_UPDATES_QUERY = "category:primary OR category:updates";
 
 /**
  * Cuántos correos recientes trae una importación. `DEFAULT` es el valor

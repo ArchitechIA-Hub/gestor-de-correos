@@ -44,14 +44,15 @@ beforeEach(async () => {
 });
 
 describe("importGmailEmails", () => {
-  it("pide a Gmail solo la pestaña Principal (INBOX + CATEGORY_PERSONAL)", async () => {
+  it("pide a Gmail las pestañas Principal y Actualizaciones (INBOX + category:primary OR category:updates)", async () => {
     const account = await seedGmailAccount();
 
     await importGmailEmails(account.id);
 
     expect(listMock).toHaveBeenCalledTimes(1);
     expect(listMock.mock.calls[0][0]).toMatchObject({
-      labelIds: ["INBOX", "CATEGORY_PERSONAL"],
+      labelIds: ["INBOX"],
+      q: "category:primary OR category:updates",
     });
   });
 

@@ -8,7 +8,7 @@ import {
   DEFAULT_GMAIL_IMPORT_LIMIT,
   MAX_GMAIL_IMPORT_LIMIT,
   MIN_GMAIL_IMPORT_LIMIT,
-  PRIMARY_INBOX_LABEL_IDS,
+  PRIMARY_OR_UPDATES_QUERY,
 } from "@/lib/gmail/constants";
 import { parseGmailMessage } from "@/lib/gmail/parse-message";
 
@@ -18,11 +18,11 @@ export type ImportGmailResult = {
 };
 
 /**
- * Importa los `limit` correos más recientes de la pestaña **Principal**
- * (Primary) del INBOX real de una cuenta
- * Gmail ya conectada (provider "gmail") como filas `Email` en estado
- * UNCLASSIFIED — el `scan()` existente las recoge en el siguiente ciclo,
- * igual que a los correos mock. No clasifica ni llama a IA aquí.
+ * Importa los `limit` correos más recientes de las pestañas **Principal** y
+ * **Actualizaciones** del INBOX real de una cuenta Gmail ya conectada
+ * (provider "gmail") como filas `Email` en estado UNCLASSIFIED — el `scan()`
+ * existente las recoge en el siguiente ciclo, igual que a los correos mock.
+ * No clasifica ni llama a IA aquí.
  */
 export async function importGmailEmails(
   mailAccountId: string,
@@ -41,7 +41,8 @@ export async function importGmailEmails(
 
   const list = await gmail.users.messages.list({
     userId: "me",
-    labelIds: [...PRIMARY_INBOX_LABEL_IDS],
+    labelIds: ["INBOX"],
+    q: PRIMARY_OR_UPDATES_QUERY,
     maxResults: clampedLimit,
   });
 

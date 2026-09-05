@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
-import { Fraunces, Instrument_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  axes: ["opsz", "SOFT", "WONK"],
+const geomini = localFont({
+  variable: "--font-geomini",
+  display: "swap",
+  src: [
+    { path: "../fonts/geomini/Geomini-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../fonts/geomini/Geomini-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../fonts/geomini/Geomini-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../fonts/geomini/Geomini-Bold.ttf", weight: "700", style: "normal" },
+  ],
 });
 
-const instrumentSans = Instrument_Sans({
-  variable: "--font-instrument-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -31,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="es"
       suppressHydrationWarning
-      className={`${fraunces.variable} ${instrumentSans.variable} h-full antialiased`}
+      className={`${geomini.variable} ${inter.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

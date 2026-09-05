@@ -22,6 +22,8 @@ async function resetDb() {
   await prisma.mailAccount.deleteMany();
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
 async function seedDraft(accountOverrides: { provider?: string; googleRefreshToken?: string | null } = {}) {
   const account = await prisma.mailAccount.create({
     data: {
@@ -133,6 +135,32 @@ describe("approveDraft", () => {
       sentMessageId: "sent-message-id-456",
       attachments: ["propuesta.pdf"],
     });
+  });
+
+  it("auto-completa el compromiso abierto más próximo al aprobar, y recalcula la urgencia del correo", async () => {
+    const { draft, email } = await seedDraft({ provider: "mock" });
+    const commitment = await prisma.commitment.create({
+      data: {
+        emailId: email.id,
+        description: "Pagar la cuota",
+        dueAt: new Date(Date.now() + 1 * HOUR_MS), // <48h: el correo debería quedar urgente antes de aprobar
+        sourceExcerpt: "paga antes de mañana",
+        status: "PENDING",
+      },
+    });
+    await prisma.email.update({ where: { id: email.id }, data: { priorityScore: 0.6, isUrgent: true } });
+
+    await approveDraft(draft.id);
+
+    const updatedCommitment = await prisma.commitment.findUniqueOrThrow({ where: { id: commitment.id } });
+    expect(updatedCommitment.status).toBe("COMPLETED");
+
+    const updatedEmail = await prisma.email.findUniqueOrThrow({ where: { id: email.id } });
+    expect(updatedEmail.isUrgent).toBe(false);
+    expect(updatedEmail.priorityScore).toBe(0);
+
+    const auditTypes = (await prisma.auditLogEntry.findMany()).map((a) => a.actionType);
+    expect(auditTypes).toEqual(["APPROVE_DRAFT", "UPDATE_COMMITMENT_STATUS"]);
   });
 
   it("cuenta gmail: si el envío falla, no aprueba el borrador ni audita nada", async () => {

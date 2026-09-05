@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "./record";
+import { recomputeEmailPriority } from "@/lib/priority/recompute-email";
 
 export class AuditRevertError extends Error {}
 
@@ -51,12 +52,17 @@ export async function revertAuditEvent(auditLogEntryId: string) {
       break;
     }
     case "DETECT_COMMITMENT": {
-      await prisma.commitment.update({ where: { id: entry.entityId }, data: { status: "CANCELLED" } });
+      const cancelled = await prisma.commitment.update({
+        where: { id: entry.entityId },
+        data: { status: "CANCELLED" },
+      });
+      await recomputeEmailPriority(cancelled.emailId);
       break;
     }
     case "UPDATE_COMMITMENT_STATUS": {
       if (before) {
-        await prisma.commitment.update({ where: { id: entry.entityId }, data: before });
+        const restored = await prisma.commitment.update({ where: { id: entry.entityId }, data: before });
+        await recomputeEmailPriority(restored.emailId);
       }
       break;
     }

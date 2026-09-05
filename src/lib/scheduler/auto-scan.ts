@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
+import { recomputeOpenCommitmentPriorities } from "@/lib/priority/recompute";
 
 declare global {
   var __autoScanTimer: ReturnType<typeof setTimeout> | undefined;
@@ -31,6 +32,14 @@ async function runCycle() {
       console.log(
         `[auto-scan] escaneados ${result.scanned} · ${result.commitmentsDetected} compromisos · ${result.urgentDetected} urgentes · ${result.marketingDetected} marketing`
       );
+    }
+
+    try {
+      const { updated } = await recomputeOpenCommitmentPriorities();
+      if (updated > 0) console.log(`[auto-scan] recalculados ${updated} correos con compromisos abiertos`);
+    } catch (error) {
+      // No debe tumbar el ciclo de escaneo de backlog si esto falla.
+      console.error("[auto-scan] error recalculando prioridades por paso del tiempo:", error);
     }
 
     const { scanFrequencyMinutes } = await getCurrentServiceLevel();

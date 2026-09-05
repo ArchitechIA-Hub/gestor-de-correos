@@ -1,11 +1,15 @@
 import { notFound } from "next/navigation";
+import { Star } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { DraftPanel } from "@/components/inbox/draft-panel";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
 import { AutoMarkRead } from "@/components/inbox/auto-mark-read";
 import { MoveToMenu } from "@/components/inbox/move-to-menu";
+import { SenderAvatar } from "@/components/inbox/sender-avatar";
+import { RescueActions } from "@/components/rescue/rescue-actions";
 import { RevertButton } from "@/components/audit/revert-button";
 import type { InboxBucketId } from "@/lib/inbox/buckets";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
@@ -71,46 +75,58 @@ export default async function EmailThreadPage({
   return (
     <div className="flex flex-col gap-8">
       <AutoMarkRead emailId={email.id} alreadyRead={!!email.readAt} />
-      <div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl text-foreground">{email.subject}</h1>
+      <Card>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <SenderAvatar id={email.senderId} name={email.sender.name} size="md" />
+              <div>
+                <CardTitle className="text-2xl font-semibold">{email.subject}</CardTitle>
+                <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{email.sender.name}</span>
+                  {email.sender.isVip && (
+                    <Star className="size-3.5 fill-vip text-vip" aria-label="Remitente VIP" />
+                  )}
+                  {email.sender.organization && <span>· {email.sender.organization}</span>}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <MoveToMenu
+                emailIds={[email.id]}
+                currentBucket={
+                  (email.category === EMAIL_CATEGORY_FINANZAS
+                    ? "finanzas"
+                    : email.isMarketing
+                      ? "marketing"
+                      : "inbox") as InboxBucketId
+                }
+                sender={{
+                  id: email.senderId,
+                  name: email.sender.name,
+                  hasFinanzasRule: email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS,
+                }}
+              />
+              <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             {email.isUrgent && <Badge className="bg-urgent text-urgent-foreground">Urgente &lt;48h</Badge>}
             {email.respondedAt && <Badge variant="secondary">Respondido</Badge>}
+            <span className="text-xs">Prioridad {email.priorityScore.toFixed(2)}</span>
+            {email.category === EMAIL_CATEGORY_FINANZAS && <Badge variant="outline">Finanzas</Badge>}
+            {email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS && (
+              <Badge variant="outline">Regla: Finanzas</Badge>
+            )}
+            {vipSlaStatus === "breached" && (
+              <Badge className="bg-urgent text-urgent-foreground">SLA VIP incumplido</Badge>
+            )}
+            {vipSlaStatus === "compliant" && <Badge variant="secondary">SLA VIP cumplido</Badge>}
+            <span>{formatLongDateTime(email.receivedAt, tz)}</span>
+            <span>· Recibido en {email.mailAccount.label}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <MoveToMenu
-              emailIds={[email.id]}
-              currentBucket={
-                (email.category === EMAIL_CATEGORY_FINANZAS
-                  ? "finanzas"
-                  : email.isMarketing
-                    ? "marketing"
-                    : "inbox") as InboxBucketId
-              }
-              sender={{
-                id: email.senderId,
-                name: email.sender.name,
-                hasFinanzasRule: email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS,
-              }}
-            />
-            <MarkReadButton emailId={email.id} isRead={!!email.readAt} />
-          </div>
-        </div>
-        <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">{email.sender.name}</span>
-          {email.sender.isVip && <Badge className="bg-vip text-vip-foreground">VIP</Badge>}
-          {email.category === EMAIL_CATEGORY_FINANZAS && <Badge variant="outline">Finanzas</Badge>}
-          {email.sender.autoCategory === EMAIL_CATEGORY_FINANZAS && (
-            <Badge variant="outline">Regla: Finanzas</Badge>
-          )}
-          {vipSlaStatus === "breached" && <Badge className="bg-urgent text-urgent-foreground">SLA VIP incumplido</Badge>}
-          {vipSlaStatus === "compliant" && <Badge variant="secondary">SLA VIP cumplido</Badge>}
-          {email.sender.organization && <span>· {email.sender.organization}</span>}
-          <span>· {formatLongDateTime(email.receivedAt, tz)}</span>
-          <span>· Recibido en {email.mailAccount.label}</span>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="rounded-lg border border-border bg-card p-6">
         {email.summary ? (
@@ -227,12 +243,15 @@ export default async function EmailThreadPage({
           <ul className="mt-3 flex flex-col gap-2">
             {email.commitments.map((c) => (
               <li key={c.id} className="rounded-lg border border-border bg-card p-3 text-sm">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-foreground">{c.description}</span>
                   <div className="flex items-center gap-2">
                     {c.calendarEvent && <Badge variant="secondary">En calendario</Badge>}
                     {c.whatsAppNotifications.length > 0 && <Badge variant="secondary">WhatsApp enviado</Badge>}
                     <Badge variant="outline">{COMMITMENT_STATUS_LABELS[c.status] ?? c.status}</Badge>
+                    {(c.status === "PENDING" || c.status === "OVERDUE") && (
+                      <RescueActions commitmentId={c.id} />
+                    )}
                   </div>
                 </div>
                 {c.dueAt && (

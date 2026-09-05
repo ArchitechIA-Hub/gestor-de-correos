@@ -6,15 +6,17 @@ import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getActiveMailAccounts } from "@/lib/mail-accounts";
 import { getUserTimeZone } from "@/lib/settings";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
+import { INBOX_PAGE_SIZE } from "@/lib/inbox/constants";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-function buildHref(params: { account?: string; view?: string; read?: string }) {
+function buildHref(params: { account?: string; view?: string; read?: string; page?: number }) {
   const search = new URLSearchParams();
   if (params.account) search.set("account", params.account);
   if (params.view && params.view !== "priorizados") search.set("view", params.view);
   if (params.read) search.set("read", params.read);
+  if (params.page && params.page > 1) search.set("page", String(params.page));
   const query = search.toString();
   return `/inbox${query ? `?${query}` : ""}`;
 }
@@ -22,11 +24,13 @@ function buildHref(params: { account?: string; view?: string; read?: string }) {
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ account?: string; view?: string; read?: string }>;
+  searchParams: Promise<{ account?: string; view?: string; read?: string; page?: string }>;
 }) {
-  const { account: accountId, view, read } = await searchParams;
+  const { account: accountId, view, read, page: pageParam } = await searchParams;
   const isMarketingView = view === "marketing";
   const isFinanzasView = view === "finanzas";
+  const page = Math.max(1, Number.parseInt(pageParam ?? "1", 10) || 1);
+  const skip = (page - 1) * INBOX_PAGE_SIZE;
 
   const [{ backlogCount }, accounts, tz] = await Promise.all([
     getCurrentServiceLevel(),
@@ -43,29 +47,50 @@ export default async function InboxPage({
         ? { readAt: { not: null } }
         : {};
 
-  const emails = isMarketingView
-    ? await prisma.email.findMany({
-        where: { status: "ARCHIVED", isMarketing: true, ...accountFilter },
-        include: { sender: true, mailAccount: true },
-        orderBy: { receivedAt: "desc" },
-        take: 50,
-      })
-    : await prisma.email.findMany({
-        where: {
-          status: "CLASSIFIED",
-          isMarketing: false,
-          category: isFinanzasView ? EMAIL_CATEGORY_FINANZAS : null,
-          ...accountFilter,
-          ...readFilter,
-        },
-        include: {
-          sender: true,
-          mailAccount: true,
-          commitments: { where: { status: { in: ["PENDING", "OVERDUE"] } }, orderBy: { dueAt: "asc" }, take: 1 },
-        },
-        orderBy: [{ priorityScore: "desc" }, { receivedAt: "desc" }],
-        take: 50,
-      });
+  // Priorizados deja pasar además lo urgente de Finanzas: la urgencia por
+  // vencimiento <48h anula el ruteo por categoría, no solo el nivel de
+  // servicio (ver CLAUDE.md). Finanzas sigue mostrando todo lo suyo sin
+  // filtrar por urgencia.
+  const categoryFilter = isFinanzasView
+    ? { category: EMAIL_CATEGORY_FINANZAS }
+    : { OR: [{ category: null }, { category: EMAIL_CATEGORY_FINANZAS, isUrgent: true }] };
+
+  const marketingWhere = { status: "ARCHIVED" as const, isMarketing: true, ...accountFilter };
+  const classifiedWhere = {
+    status: "CLASSIFIED" as const,
+    isMarketing: false,
+    ...categoryFilter,
+    ...accountFilter,
+    ...readFilter,
+  };
+
+  const [emails, totalCount] = isMarketingView
+    ? await Promise.all([
+        prisma.email.findMany({
+          where: marketingWhere,
+          include: { sender: true, mailAccount: true },
+          orderBy: { receivedAt: "desc" },
+          skip,
+          take: INBOX_PAGE_SIZE,
+        }),
+        prisma.email.count({ where: marketingWhere }),
+      ])
+    : await Promise.all([
+        prisma.email.findMany({
+          where: classifiedWhere,
+          include: {
+            sender: true,
+            mailAccount: true,
+            commitments: { where: { status: { in: ["PENDING", "OVERDUE"] } }, orderBy: { dueAt: "asc" }, take: 1 },
+          },
+          orderBy: [{ priorityScore: "desc" }, { receivedAt: "desc" }],
+          skip,
+          take: INBOX_PAGE_SIZE,
+        }),
+        prisma.email.count({ where: classifiedWhere }),
+      ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / INBOX_PAGE_SIZE));
 
   const rows: InboxRow[] = emails.map((e) => {
     const commitments = (e as { commitments?: { description: string; dueAt: Date | null }[] }).commitments;
@@ -79,7 +104,7 @@ export default async function InboxPage({
       isMarketing: e.isMarketing,
       marketingReason: e.marketingReason,
       priorityScore: e.priorityScore,
-      sender: { name: e.sender.name, isVip: e.sender.isVip, organization: e.sender.organization },
+      sender: { id: e.sender.id, name: e.sender.name, isVip: e.sender.isVip, organization: e.sender.organization },
       mailAccount: { label: e.mailAccount.label },
       commitments: commitments?.map((c) => ({ description: c.description, dueAt: c.dueAt })),
     };
@@ -107,44 +132,42 @@ export default async function InboxPage({
         <ScanButton backlogCount={backlogCount} />
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-        <aside className="lg:w-48 lg:shrink-0">
-          <p className="px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Cuentas</p>
-          <nav className="mt-2 flex flex-row flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5">
+      <div className="flex flex-col gap-4">
+        <nav className="flex flex-wrap items-center gap-1 text-sm">
+          <Link
+            href={buildHref({ view, read })}
+            className={cn(
+              "rounded-md px-2 py-1.5",
+              !accountId ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
+            )}
+          >
+            Todas
+          </Link>
+          {accounts.map((account) => (
             <Link
-              href={buildHref({ view, read })}
+              key={account.id}
+              href={buildHref({ account: account.id, view, read })}
               className={cn(
-                "rounded-md px-2 py-1.5",
-                !accountId ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
+                "truncate rounded-md px-2 py-1.5",
+                accountId === account.id
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-secondary/60"
               )}
             >
-              Todas
+              {account.label}
             </Link>
-            {accounts.map((account) => (
-              <Link
-                key={account.id}
-                href={buildHref({ account: account.id, view, read })}
-                className={cn(
-                  "truncate rounded-md px-2 py-1.5 lg:max-w-full",
-                  accountId === account.id
-                    ? "bg-secondary text-secondary-foreground"
-                    : "text-muted-foreground hover:bg-secondary/60"
-                )}
-              >
-                {account.label}
-              </Link>
-            ))}
-          </nav>
+          ))}
+        </nav>
 
-          <p className="mt-5 px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Vista</p>
-          <nav className="mt-2 flex flex-row flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1 rounded-full bg-muted p-1 text-sm">
             <Link
               href={buildHref({ account: accountId, view: "priorizados", read })}
               className={cn(
-                "rounded-md px-2 py-1.5",
+                "rounded-full px-3 py-1.5 transition-colors",
                 !isMarketingView && !isFinanzasView
-                  ? "bg-secondary text-secondary-foreground"
-                  : "text-muted-foreground hover:bg-secondary/60"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               Priorizados
@@ -152,8 +175,8 @@ export default async function InboxPage({
             <Link
               href={buildHref({ account: accountId, view: "finanzas", read })}
               className={cn(
-                "rounded-md px-2 py-1.5",
-                isFinanzasView ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
+                "rounded-full px-3 py-1.5 transition-colors",
+                isFinanzasView ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Finanzas
@@ -161,42 +184,72 @@ export default async function InboxPage({
             <Link
               href={buildHref({ account: accountId, view: "marketing", read })}
               className={cn(
-                "rounded-md px-2 py-1.5",
-                isMarketingView ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-secondary/60"
+                "rounded-full px-3 py-1.5 transition-colors",
+                isMarketingView ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
               Marketing ignorado
             </Link>
-          </nav>
+          </div>
 
           {!isMarketingView && (
-            <>
-              <p className="mt-5 px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Estado</p>
-              <nav className="mt-2 flex flex-row flex-wrap gap-1 text-sm lg:flex-col lg:flex-nowrap lg:gap-0.5">
-                {[
-                  { key: undefined, label: "Todos" },
-                  { key: "unread", label: "Sin leer" },
-                  { key: "read", label: "Leídos" },
-                ].map((opt) => (
+            <nav className="flex items-center gap-4 border-b border-border text-sm">
+              {[
+                { key: undefined, label: "Todos" },
+                { key: "unread", label: "Sin leer" },
+                { key: "read", label: "Leídos" },
+              ].map((opt) => {
+                const active = (read ?? undefined) === opt.key;
+                return (
                   <Link
                     key={opt.label}
                     href={buildHref({ account: accountId, view, read: opt.key })}
                     className={cn(
-                      "rounded-md px-2 py-1.5",
-                      (read ?? undefined) === opt.key
-                        ? "bg-secondary text-secondary-foreground"
-                        : "text-muted-foreground hover:bg-secondary/60"
+                      "-mb-px border-b-2 px-1 pb-2 transition-colors",
+                      active
+                        ? "border-primary font-medium text-primary"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {opt.label}
                   </Link>
-                ))}
-              </nav>
-            </>
+                );
+              })}
+            </nav>
           )}
-        </aside>
+        </div>
 
-        <InboxTable emails={rows} view={view} tz={tz} emptyMessage={emptyMessage} />
+        <InboxTable key={`${view}-${read}-${page}`} emails={rows} view={view} tz={tz} emptyMessage={emptyMessage} />
+
+        {totalCount > 0 && (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>
+              Página {page} de {totalPages} · {totalCount} correo{totalCount === 1 ? "" : "s"}
+            </span>
+            <div className="flex items-center gap-2">
+              {page > 1 ? (
+                <Link
+                  href={buildHref({ account: accountId, view, read, page: page - 1 })}
+                  className="rounded-md px-2 py-1.5 hover:bg-secondary/60 hover:text-foreground"
+                >
+                  Anterior
+                </Link>
+              ) : (
+                <span className="rounded-md px-2 py-1.5 opacity-40">Anterior</span>
+              )}
+              {page < totalPages ? (
+                <Link
+                  href={buildHref({ account: accountId, view, read, page: page + 1 })}
+                  className="rounded-md px-2 py-1.5 hover:bg-secondary/60 hover:text-foreground"
+                >
+                  Siguiente
+                </Link>
+              ) : (
+                <span className="rounded-md px-2 py-1.5 opacity-40">Siguiente</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

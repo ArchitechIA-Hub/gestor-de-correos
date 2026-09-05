@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MarkReadButton } from "@/components/inbox/mark-read-button";
 import { MoveToMenu } from "@/components/inbox/move-to-menu";
+import { SenderAvatar } from "@/components/inbox/sender-avatar";
 import { formatShortDateTime } from "@/lib/format/date";
 import { bucketFromView } from "@/lib/inbox/buckets";
 import { cn } from "@/lib/utils";
@@ -20,7 +22,7 @@ export type InboxRow = {
   isMarketing: boolean;
   marketingReason: string | null;
   priorityScore: number;
-  sender: { name: string; isVip: boolean; organization: string | null };
+  sender: { id: string; name: string; isVip: boolean; organization: string | null };
   mailAccount: { label: string };
   commitments?: { description: string; dueAt: Date | null }[];
 };
@@ -65,15 +67,15 @@ export function InboxTable({
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2">
       {selectedList.length > 0 && (
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 text-sm">
-          <span className="font-medium text-foreground">
+        <div className="flex items-center gap-3 rounded-lg bg-navy-900 px-3 py-2 text-sm text-white">
+          <span className="font-medium">
             {selectedList.length} seleccionado{selectedList.length === 1 ? "" : "s"}
           </span>
           <MoveToMenu emailIds={selectedList} currentBucket={currentBucket} onDone={clear} />
           <button
             type="button"
             onClick={clear}
-            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+            className="text-xs text-white/70 hover:text-white hover:underline"
           >
             Limpiar selección
           </button>
@@ -91,7 +93,7 @@ export function InboxTable({
                     checked={allSelected}
                     onChange={toggleAll}
                     aria-label="Seleccionar todo"
-                    className="size-3.5 align-middle"
+                    className="size-3.5 accent-primary align-middle"
                   />
                 </TableHead>
                 <TableHead className="py-2 text-xs">Remitente</TableHead>
@@ -117,28 +119,33 @@ export function InboxTable({
                         checked={isSelected}
                         onChange={() => toggle(email.id)}
                         aria-label={`Seleccionar correo de ${email.sender.name}`}
-                        className="size-3.5 align-middle"
+                        className="size-3.5 accent-primary align-middle"
                       />
                     </TableCell>
                     <TableCell className="py-1.5">
-                      <Link href={`/inbox/${email.id}`} className="block">
-                        <div className="flex items-center gap-2">
-                          {isUnread && (
-                            <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="No leído" />
-                          )}
-                          <span
-                            className={cn(
-                              "text-sm",
-                              isUnread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
+                      <Link href={`/inbox/${email.id}`} className="flex items-start gap-2">
+                        <SenderAvatar id={email.sender.id} name={email.sender.name} size="sm" />
+                        <div className="flex min-w-0 flex-col">
+                          <div className="flex items-center gap-1.5">
+                            {isUnread && (
+                              <span className="size-2 shrink-0 rounded-full bg-primary" aria-label="No leído" />
                             )}
-                          >
-                            {email.sender.name}
-                          </span>
-                          {email.sender.isVip && <Badge className="bg-vip text-vip-foreground">VIP</Badge>}
+                            <span
+                              className={cn(
+                                "text-sm",
+                                isUnread ? "font-bold text-foreground" : "font-medium text-muted-foreground"
+                              )}
+                            >
+                              {email.sender.name}
+                            </span>
+                            {email.sender.isVip && (
+                              <Star className="size-3.5 shrink-0 fill-vip text-vip" aria-label="Remitente VIP" />
+                            )}
+                          </div>
+                          {email.sender.organization && (
+                            <span className="text-xs text-muted-foreground">{email.sender.organization}</span>
+                          )}
                         </div>
-                        {email.sender.organization && (
-                          <span className="text-xs text-muted-foreground">{email.sender.organization}</span>
-                        )}
                       </Link>
                     </TableCell>
                     <TableCell className="whitespace-nowrap py-1.5 text-xs text-muted-foreground">

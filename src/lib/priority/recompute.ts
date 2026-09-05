@@ -1,0 +1,62 @@
+import { prisma } from "@/lib/db/prisma";
+import { computePriorityScore, isUrgentByDeadline } from "./engine";
+import { recordAuditEvent } from "@/lib/audit/record";
+
+/**
+ * Recálculo periódico de correos ya clasificados con un compromiso abierto
+ * (PENDING/OVERDUE): nada más lo dispara con el paso del tiempo (el score se
+ * escribe una sola vez en scan() y solo se vuelve a tocar como efecto
+ * secundario de acciones explícitas del usuario). Sin esto, un compromiso que
+ * vence sin que el usuario haga nada se queda marcado "urgente" para siempre.
+ * Se llama desde el ciclo del scheduler (src/lib/scheduler/auto-scan.ts).
+ *
+ * Solo escribe (y audita) los correos cuyo `isUrgent` realmente cambió, para
+ * no generar ruido de auditoría por variaciones de score que no cambian nada
+ * visible para el usuario.
+ */
+export async function recomputeOpenCommitmentPriorities(now: Date = new Date()): Promise<{ updated: number }> {
+  const emails = await prisma.email.findMany({
+    where: {
+      status: "CLASSIFIED",
+      commitments: { some: { status: { in: ["PENDING", "OVERDUE"] } } },
+    },
+    include: {
+      sender: true,
+      commitments: {
+        where: { status: { in: ["PENDING", "OVERDUE"] } },
+        orderBy: { dueAt: { sort: "asc", nulls: "last" } },
+        take: 1,
+      },
+    },
+  });
+
+  let updated = 0;
+
+  for (const email of emails) {
+    const nearestDueAt = email.commitments[0]?.dueAt ?? null;
+    const priorityScore = computePriorityScore(
+      { id: email.id, receivedAt: email.receivedAt, isVip: email.sender.isVip, nearestDueAt },
+      now
+    );
+    const isUrgent = isUrgentByDeadline(nearestDueAt, now);
+
+    if (isUrgent === email.isUrgent && priorityScore === email.priorityScore) continue;
+
+    const before = { priorityScore: email.priorityScore, isUrgent: email.isUrgent };
+    await prisma.email.update({ where: { id: email.id }, data: { priorityScore, isUrgent } });
+    updated++;
+
+    if (isUrgent !== email.isUrgent) {
+      await recordAuditEvent({
+        actionType: "CLASSIFY",
+        entityType: "Email",
+        entityId: email.id,
+        payloadBefore: before,
+        payloadAfter: { priorityScore, isUrgent, reason: "recálculo periódico por paso del tiempo" },
+        performedBy: "SYSTEM",
+      });
+    }
+  }
+
+  return { updated };
+}
