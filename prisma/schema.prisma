@@ -256,3 +256,22 @@ model ServiceLevelHistory {
   backlogCount   Int
   recordedAt     DateTime @default(now())
 }
+
+/**
+ * Una fila por cada ciclo del scheduler automático (import + scan), para
+ * poder ver el gasto real de tokens en vez de solo el tope teórico — ver
+ * discusión de costo en la sesión que agregó el import automático.
+ */
+model ScanCycleLog {
+  id             String   @id @default(cuid())
+  startedAt      DateTime @default(now())
+  emailsImported Int      @default(0)
+  emailsScanned  Int      @default(0)
+  inputTokens    Int      @default(0)
+  outputTokens   Int      @default(0)
+  totalTokens    Int      @default(0)
+  serviceLevel   Int
+  backlogCount   Int
+
+  @@index([startedAt])
+}

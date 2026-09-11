@@ -48,7 +48,18 @@ export type ExtractCommitmentsInput = {
   timeZone: string;
 };
 
-export async function extractCommitments(input: ExtractCommitmentsInput): Promise<CommitmentExtraction> {
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+export type ExtractCommitmentsResult = {
+  extraction: CommitmentExtraction;
+  usage: TokenUsage;
+};
+
+export async function extractCommitments(input: ExtractCommitmentsInput): Promise<ExtractCommitmentsResult> {
   const offset = getTimeZoneOffset(input.receivedAt, input.timeZone);
   // Hora de pared en la zona del usuario (sv-SE ⇒ "2026-09-01 09:00:00").
   const receivedLocal = new Intl.DateTimeFormat("sv-SE", {
@@ -79,5 +90,12 @@ export async function extractCommitments(input: ExtractCommitmentsInput): Promis
     throw new Error("La extracción de compromisos no devolvió una salida estructurada válida.");
   }
 
-  return response.output_parsed;
+  return {
+    extraction: response.output_parsed,
+    usage: {
+      inputTokens: response.usage?.input_tokens ?? 0,
+      outputTokens: response.usage?.output_tokens ?? 0,
+      totalTokens: response.usage?.total_tokens ?? 0,
+    },
+  };
 }

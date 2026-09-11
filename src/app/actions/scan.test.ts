@@ -8,6 +8,7 @@ import { extractCommitments } from "@/lib/ai/extract-commitments";
 import { scan } from "./scan";
 
 const mockedExtractCommitments = vi.mocked(extractCommitments);
+const ZERO_USAGE = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
 
 function isoHoursFromNow(hours: number): string {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
@@ -63,11 +64,14 @@ describe("scan", () => {
   it("archiva un correo de marketing sin extraer compromisos", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: true,
       marketingReason: "Newsletter promocional",
       category: null,
       commitments: [],
+      },
+      usage: ZERO_USAGE,
     });
 
     const result = await scan();
@@ -86,6 +90,7 @@ describe("scan", () => {
   it("clasifica un correo con un compromiso lejano sin marcarlo urgente", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -99,6 +104,8 @@ describe("scan", () => {
           sourceExcerpt: "en un mes",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     const result = await scan();
@@ -119,6 +126,7 @@ describe("scan", () => {
   it("marca urgente y crea la alerta push cuando el compromiso vence en menos de 48h, sin importar los extras", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -132,6 +140,8 @@ describe("scan", () => {
           sourceExcerpt: "antes de mañana",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     const result = await scan();
@@ -153,6 +163,7 @@ describe("scan", () => {
     await prisma.extraConfig.create({ data: { calendarEnabled: true } });
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -166,6 +177,8 @@ describe("scan", () => {
           sourceExcerpt: "en 10 días",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();
@@ -182,6 +195,7 @@ describe("scan", () => {
     await prisma.extraConfig.create({ data: { whatsappEnabled: true } });
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -195,6 +209,8 @@ describe("scan", () => {
           sourceExcerpt: "hoy mismo",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();
@@ -209,6 +225,7 @@ describe("scan", () => {
   it("no crea eventos de calendario ni notificaciones de WhatsApp si los extras están apagados por defecto", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -222,6 +239,8 @@ describe("scan", () => {
           sourceExcerpt: "hoy mismo",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();
@@ -235,11 +254,14 @@ describe("scan", () => {
       await seedUnclassifiedEmail({ index: i });
     }
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       category: null,
       commitments: [],
+      },
+      usage: ZERO_USAGE,
     });
 
     const result = await scan();
@@ -253,11 +275,14 @@ describe("scan", () => {
       await seedUnclassifiedEmail({ index: i });
     }
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
       category: null,
       commitments: [],
+      },
+      usage: ZERO_USAGE,
     });
 
     expect((await scan({ limit: 5 })).scanned).toBe(5);
@@ -268,6 +293,7 @@ describe("scan", () => {
   it("marca un compromiso como OVERDUE si su fecha ya pasó al momento de detectarlo", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -281,6 +307,8 @@ describe("scan", () => {
           sourceExcerpt: "hace unos días",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();
@@ -292,6 +320,7 @@ describe("scan", () => {
   it("resuelve un dueDateISO sin desfase en la zona del usuario (America/Bogota por defecto)", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Resumen de prueba.",
       isMarketing: false,
       marketingReason: null,
@@ -305,6 +334,8 @@ describe("scan", () => {
           sourceExcerpt: "mañana a las 9",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();
@@ -317,6 +348,7 @@ describe("scan", () => {
   it("clasifica en FINANZAS cuando la IA devuelve category y sigue creando el compromiso", async () => {
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Tu tarjeta vence pronto.",
       isMarketing: false,
       marketingReason: null,
@@ -330,6 +362,8 @@ describe("scan", () => {
           sourceExcerpt: "vence el día 30",
         },
       ],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();
@@ -344,11 +378,14 @@ describe("scan", () => {
   it("la regla del remitente (autoCategory FINANZAS) gana sobre la IA aunque diga marketing", async () => {
     await seedUnclassifiedEmail({ senderAutoCategory: "FINANZAS" });
     mockedExtractCommitments.mockResolvedValue({
+      extraction: {
       summary: "Movimiento en tu cuenta.",
       isMarketing: true,
       marketingReason: "Parecía masivo",
       category: null,
       commitments: [],
+      },
+      usage: ZERO_USAGE,
     });
 
     await scan();

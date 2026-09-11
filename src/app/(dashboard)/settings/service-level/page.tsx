@@ -6,11 +6,25 @@ import {
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { Badge } from "@/components/ui/badge";
 import { DevBacklogControls } from "@/components/settings/dev-backlog-controls";
+import { prisma } from "@/lib/db/prisma";
+import { formatShortDateTime } from "@/lib/format/date";
+import { getUserTimeZone } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
+const RECENT_CYCLES_LIMIT = 10;
+
 export default async function ServiceLevelPage() {
   const current = await getCurrentServiceLevel();
+  const timeZone = await getUserTimeZone();
+  const recentCycles = await prisma.scanCycleLog.findMany({
+    orderBy: { startedAt: "desc" },
+    take: RECENT_CYCLES_LIMIT,
+  });
+  const tokensToday = await prisma.scanCycleLog.aggregate({
+    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+    _sum: { totalTokens: true },
+  });
 
   return (
     <div className="flex flex-col gap-8">
@@ -60,6 +74,47 @@ export default async function ServiceLevelPage() {
             </div>
           );
         })}
+      </div>
+
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-foreground">Actividad del escaneo automático</p>
+          <span className="text-xs text-muted-foreground">
+            Hoy: {(tokensToday._sum.totalTokens ?? 0).toLocaleString("es")} tokens
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Cada ciclo importa correo nuevo de Gmail (sin costo de IA) y clasifica el backlog resultante
+          (máx. 20 correos por ciclo). Últimos {RECENT_CYCLES_LIMIT} ciclos:
+        </p>
+        {recentCycles.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Todavía no corrió ningún ciclo automático.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th className="pr-4 pb-1 font-normal">Fecha</th>
+                  <th className="pr-4 pb-1 font-normal">Nivel</th>
+                  <th className="pr-4 pb-1 font-normal">Importados</th>
+                  <th className="pr-4 pb-1 font-normal">Escaneados</th>
+                  <th className="pr-4 pb-1 font-normal">Tokens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentCycles.map((cycle) => (
+                  <tr key={cycle.id} className="border-t border-border/50 text-foreground">
+                    <td className="py-1 pr-4">{formatShortDateTime(cycle.startedAt, timeZone)}</td>
+                    <td className="py-1 pr-4">{cycle.serviceLevel}</td>
+                    <td className="py-1 pr-4">{cycle.emailsImported}</td>
+                    <td className="py-1 pr-4">{cycle.emailsScanned}</td>
+                    <td className="py-1 pr-4">{cycle.totalTokens.toLocaleString("es")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {process.env.NODE_ENV !== "production" && (

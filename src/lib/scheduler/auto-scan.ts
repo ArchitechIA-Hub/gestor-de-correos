@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/db/prisma";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { recomputeOpenCommitmentPriorities } from "@/lib/priority/recompute";
 
@@ -20,19 +19,20 @@ function scheduleNext(minutes: number) {
 
 async function runCycle() {
   try {
-    const pendingCount = await prisma.email.count({ where: { status: "UNCLASSIFIED" } });
-
-    if (pendingCount > 0) {
-      const response = await fetch(`${APP_URL}/api/scan`, {
-        method: "POST",
-        headers: process.env.INTERNAL_SCAN_SECRET ? { "x-scan-secret": process.env.INTERNAL_SCAN_SECRET } : {},
-      });
-      if (!response.ok) throw new Error(`El endpoint de escaneo respondió ${response.status}`);
-      const result = await response.json();
-      console.log(
-        `[auto-scan] escaneados ${result.scanned} · ${result.commitmentsDetected} compromisos · ${result.urgentDetected} urgentes · ${result.marketingDetected} marketing`
-      );
-    }
+    // Siempre se llama, aunque el backlog ya clasificado esté en 0: el paso
+    // de import (sin costo de IA) es el que trae correo nuevo, y solo se ve
+    // reflejado en el backlog DESPUÉS de correr — filtrar por backlog previo
+    // aquí dejaría el import sin correr nunca en el caso normal de "ya estoy
+    // al día".
+    const response = await fetch(`${APP_URL}/api/scan`, {
+      method: "POST",
+      headers: process.env.INTERNAL_SCAN_SECRET ? { "x-scan-secret": process.env.INTERNAL_SCAN_SECRET } : {},
+    });
+    if (!response.ok) throw new Error(`El endpoint de escaneo respondió ${response.status}`);
+    const result = await response.json();
+    console.log(
+      `[auto-scan] importados ${result.imported} · escaneados ${result.scanned} · ${result.commitmentsDetected} compromisos · ${result.urgentDetected} urgentes · ${result.marketingDetected} marketing · ${result.totalTokens} tokens`
+    );
 
     try {
       const { updated } = await recomputeOpenCommitmentPriorities();
@@ -58,8 +58,10 @@ async function runCycle() {
  * ciclos. Requiere que el proceso del servidor (`next dev` / `next start`)
  * siga vivo; no funciona en un entorno serverless sin timers persistentes.
  *
- * IMPORTANTE: cada ciclo con backlog pendiente dispara llamadas reales (con
- * costo) a la API de IA. Se puede desactivar con AUTO_SCAN_ENABLED=false.
+ * IMPORTANTE: cada ciclo llama a /api/scan (import de Gmail + clasificación).
+ * El import no tiene costo de IA; la clasificación solo llama a la IA sobre
+ * los correos que de verdad quedaron sin clasificar (0 costo si no hay
+ * ninguno). Se puede desactivar todo el ciclo con AUTO_SCAN_ENABLED=false.
  */
 export function startAutoScanScheduler() {
   if (globalThis.__autoScanTimer) return; // ya arrancado (hot reload en dev)

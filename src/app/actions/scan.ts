@@ -18,6 +18,9 @@ export type ScanResult = {
   commitmentsDetected: number;
   urgentDetected: number;
   marketingDetected: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
 };
 
 export type ScanOptions = {
@@ -61,14 +64,20 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
   let commitmentsDetected = 0;
   let urgentDetected = 0;
   let marketingDetected = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
 
   for (const email of unclassified) {
-    const extraction = await extractCommitments({
+    const { extraction, usage } = await extractCommitments({
       subject: email.subject,
       body: email.rawBody,
       receivedAt: email.receivedAt,
       timeZone,
     });
+    inputTokens += usage.inputTokens;
+    outputTokens += usage.outputTokens;
+    totalTokens += usage.totalTokens;
 
     // Regla fija del remitente > detección de la IA. Un remitente enrutado a
     // FINANZAS por regla no se archiva como marketing aunque la IA lo diga.
@@ -201,5 +210,13 @@ export async function scan(options: ScanOptions = {}): Promise<ScanResult> {
   revalidatePath("/audit");
   revalidatePath("/settings/service-level");
 
-  return { scanned: unclassified.length, commitmentsDetected, urgentDetected, marketingDetected };
+  return {
+    scanned: unclassified.length,
+    commitmentsDetected,
+    urgentDetected,
+    marketingDetected,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+  };
 }

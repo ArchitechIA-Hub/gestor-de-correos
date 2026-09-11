@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:seed": "tsx prisma/seed.ts",
+    "db:purge-mock": "tsx prisma/purge-mock-data.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

@@ -17,3 +17,11 @@ export const PRIMARY_OR_UPDATES_QUERY = "category:primary OR category:updates";
 export const DEFAULT_GMAIL_IMPORT_LIMIT = 50;
 export const MIN_GMAIL_IMPORT_LIMIT = 1;
 export const MAX_GMAIL_IMPORT_LIMIT = 500;
+
+/**
+ * Paginación del catch-up automático (`importNewGmailEmails`): tamaño de
+ * página al listar mensajes y tope de páginas como circuito de seguridad
+ * (no un límite de costo — ver comentario en el import automático).
+ */
+export const CATCH_UP_PAGE_SIZE = 100;
+export const CATCH_UP_MAX_PAGES = 50;
