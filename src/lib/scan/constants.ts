@@ -10,7 +10,7 @@
  * Va en su propio archivo porque `scan.ts` es `"use server"` y un módulo con
  * esa directiva solo puede exportar funciones async, no constantes.
  */
-export const SCAN_BATCH_SIZE = 20;
+export const SCAN_BATCH_SIZE = 50;
 export const MIN_SCAN_BATCH_SIZE = 1;
 
 /**

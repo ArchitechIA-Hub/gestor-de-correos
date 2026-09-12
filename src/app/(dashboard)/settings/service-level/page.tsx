@@ -9,6 +9,7 @@ import { DevBacklogControls } from "@/components/settings/dev-backlog-controls";
 import { prisma } from "@/lib/db/prisma";
 import { formatShortDateTime } from "@/lib/format/date";
 import { getUserTimeZone } from "@/lib/settings";
+import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +86,7 @@ export default async function ServiceLevelPage() {
         </div>
         <p className="mb-3 text-xs text-muted-foreground">
           Cada ciclo importa correo nuevo de Gmail (sin costo de IA) y clasifica el backlog resultante
-          (máx. 20 correos por ciclo). Últimos {RECENT_CYCLES_LIMIT} ciclos:
+          (máx. {SCAN_BATCH_SIZE} correos por ciclo). Últimos {RECENT_CYCLES_LIMIT} ciclos:
         </p>
         {recentCycles.length === 0 ? (
           <p className="text-xs text-muted-foreground">Todavía no corrió ningún ciclo automático.</p>

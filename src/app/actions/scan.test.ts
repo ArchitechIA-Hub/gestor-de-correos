@@ -6,6 +6,7 @@ vi.mock("@/lib/ai/extract-commitments", () => ({ extractCommitments: vi.fn() }))
 import { prisma } from "@/lib/db/prisma";
 import { extractCommitments } from "@/lib/ai/extract-commitments";
 import { scan } from "./scan";
+import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 
 const mockedExtractCommitments = vi.mocked(extractCommitments);
 const ZERO_USAGE = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -249,8 +250,9 @@ describe("scan", () => {
     expect(await prisma.whatsAppNotification.count()).toBe(0);
   });
 
-  it("procesa como máximo SCAN_BATCH_SIZE (20) correos por pasada", async () => {
-    for (let i = 0; i < 25; i++) {
+  it("procesa como máximo SCAN_BATCH_SIZE correos por pasada", async () => {
+    const total = SCAN_BATCH_SIZE + 5;
+    for (let i = 0; i < total; i++) {
       await seedUnclassifiedEmail({ index: i });
     }
     mockedExtractCommitments.mockResolvedValue({
@@ -266,12 +268,13 @@ describe("scan", () => {
 
     const result = await scan();
 
-    expect(result.scanned).toBe(20);
+    expect(result.scanned).toBe(SCAN_BATCH_SIZE);
     expect(await prisma.email.count({ where: { status: "UNCLASSIFIED" } })).toBe(5);
   });
 
   it("respeta el limit pedido y lo recorta a [1, SCAN_BATCH_SIZE]", async () => {
-    for (let i = 0; i < 25; i++) {
+    const total = SCAN_BATCH_SIZE + 5;
+    for (let i = 0; i < total; i++) {
       await seedUnclassifiedEmail({ index: i });
     }
     mockedExtractCommitments.mockResolvedValue({
@@ -287,7 +290,8 @@ describe("scan", () => {
 
     expect((await scan({ limit: 5 })).scanned).toBe(5);
     expect((await scan({ limit: 0 })).scanned).toBe(1);
-    expect((await scan({ limit: 999 })).scanned).toBe(19); // quedaban 25 - 5 - 1 = 19, tope 20
+    // quedaban total - 5 - 1, tope SCAN_BATCH_SIZE
+    expect((await scan({ limit: 999 })).scanned).toBe(Math.min(SCAN_BATCH_SIZE, total - 5 - 1));
   });
 
   it("marca un compromiso como OVERDUE si su fecha ya pasó al momento de detectarlo", async () => {
