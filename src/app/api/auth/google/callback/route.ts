@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { exchangeCodeForTokens, getAuthenticatedGmailProfile } from "@/lib/gmail/client";
+import { describeGoogleApiError } from "@/lib/gmail/errors";
 
 /**
  * Callback del consentimiento OAuth de Google. Intercambia el `code` por
@@ -26,13 +27,23 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const tokens = await exchangeCodeForTokens(code);
-  if (!tokens.refresh_token) {
-    return NextResponse.redirect(new URL("/settings/accounts?gmail_error=sin_refresh_token", appOrigin));
-  }
+  let tokens: Awaited<ReturnType<typeof exchangeCodeForTokens>>;
+  let emailAddress: string | null | undefined;
+  try {
+    tokens = await exchangeCodeForTokens(code);
+    if (!tokens.refresh_token) {
+      return NextResponse.redirect(new URL("/settings/accounts?gmail_error=sin_refresh_token", appOrigin));
+    }
 
-  const profile = await getAuthenticatedGmailProfile(tokens);
-  const emailAddress = profile.emailAddress;
+    const profile = await getAuthenticatedGmailProfile(tokens);
+    emailAddress = profile.emailAddress;
+  } catch (error) {
+    // No dejar propagar el error de gaxios/googleapis tal cual: trae el
+    // cuerpo crudo de la request (código de autorización, credenciales del
+    // cliente) — ver src/lib/gmail/errors.ts.
+    console.error("[oauth] fallo al intercambiar el code por tokens:", describeGoogleApiError(error));
+    return NextResponse.redirect(new URL("/settings/accounts?gmail_error=fallo_oauth", appOrigin));
+  }
   if (!emailAddress) {
     return NextResponse.redirect(new URL("/settings/accounts?gmail_error=sin_perfil", appOrigin));
   }

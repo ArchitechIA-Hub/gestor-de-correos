@@ -15,6 +15,7 @@ import {
   PRIMARY_OR_UPDATES_QUERY,
 } from "@/lib/gmail/constants";
 import { parseGmailMessage } from "@/lib/gmail/parse-message";
+import { describeGoogleApiError } from "@/lib/gmail/errors";
 import type { AuditPerformer } from "@/generated/prisma/enums";
 
 export type ImportGmailResult = {
@@ -96,27 +97,34 @@ export async function importGmailEmails(
 
   const gmail = getGmailClientForAccount(mailAccount);
 
-  const list = await gmail.users.messages.list({
-    userId: "me",
-    labelIds: ["INBOX"],
-    q: PRIMARY_OR_UPDATES_QUERY,
-    maxResults: clampedLimit,
-  });
-
-  const messageIds = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
-
   let imported = 0;
   let skipped = 0;
 
-  for (const gmailMessageId of messageIds) {
-    const already = await prisma.email.findUnique({ where: { gmailMessageId } });
-    if (already) {
-      skipped++;
-      continue;
-    }
+  try {
+    const list = await gmail.users.messages.list({
+      userId: "me",
+      labelIds: ["INBOX"],
+      q: PRIMARY_OR_UPDATES_QUERY,
+      maxResults: clampedLimit,
+    });
 
-    await importSingleGmailMessage(mailAccount, gmail, gmailMessageId, "USER");
-    imported++;
+    const messageIds = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
+
+    for (const gmailMessageId of messageIds) {
+      const already = await prisma.email.findUnique({ where: { gmailMessageId } });
+      if (already) {
+        skipped++;
+        continue;
+      }
+
+      await importSingleGmailMessage(mailAccount, gmail, gmailMessageId, "USER");
+      imported++;
+    }
+  } catch (error) {
+    // No relanzar el error de gaxios/googleapis tal cual: trae el cuerpo
+    // crudo de la request (incluido el refresh_token) — ver
+    // src/lib/gmail/errors.ts.
+    throw new Error(describeGoogleApiError(error));
   }
 
   revalidatePath("/", "layout");
@@ -154,43 +162,51 @@ export async function importNewGmailEmails(mailAccountId: string): Promise<Impor
 
   let imported = 0;
   let skipped = 0;
-  let pageToken: string | undefined;
-  let reachedKnownMessage = false;
 
-  for (let page = 0; page < CATCH_UP_MAX_PAGES; page++) {
-    const list = await gmail.users.messages.list({
-      userId: "me",
-      labelIds: ["INBOX"],
-      q: PRIMARY_OR_UPDATES_QUERY,
-      maxResults: CATCH_UP_PAGE_SIZE,
-      pageToken,
-    });
+  try {
+    let pageToken: string | undefined;
+    let reachedKnownMessage = false;
 
-    const messageIds = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
-    if (messageIds.length === 0) break;
+    for (let page = 0; page < CATCH_UP_MAX_PAGES; page++) {
+      const list = await gmail.users.messages.list({
+        userId: "me",
+        labelIds: ["INBOX"],
+        q: PRIMARY_OR_UPDATES_QUERY,
+        maxResults: CATCH_UP_PAGE_SIZE,
+        pageToken,
+      });
 
-    for (const gmailMessageId of messageIds) {
-      const already = await prisma.email.findUnique({ where: { gmailMessageId } });
-      if (already) {
-        skipped++;
-        reachedKnownMessage = true;
-        break;
+      const messageIds = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
+      if (messageIds.length === 0) break;
+
+      for (const gmailMessageId of messageIds) {
+        const already = await prisma.email.findUnique({ where: { gmailMessageId } });
+        if (already) {
+          skipped++;
+          reachedKnownMessage = true;
+          break;
+        }
+
+        await importSingleGmailMessage(mailAccount, gmail, gmailMessageId, "SYSTEM");
+        imported++;
       }
 
-      await importSingleGmailMessage(mailAccount, gmail, gmailMessageId, "SYSTEM");
-      imported++;
+      if (reachedKnownMessage) break;
+
+      pageToken = list.data.nextPageToken ?? undefined;
+      if (!pageToken) break;
+
+      if (page === CATCH_UP_MAX_PAGES - 1) {
+        console.warn(
+          `[import] catch-up para ${mailAccount.emailAddress} llegó al tope de ${CATCH_UP_MAX_PAGES} páginas sin encontrar un correo ya importado — puede quedar backlog más antiguo por traer, el próximo ciclo sigue avanzando.`
+        );
+      }
     }
-
-    if (reachedKnownMessage) break;
-
-    pageToken = list.data.nextPageToken ?? undefined;
-    if (!pageToken) break;
-
-    if (page === CATCH_UP_MAX_PAGES - 1) {
-      console.warn(
-        `[import] catch-up para ${mailAccount.emailAddress} llegó al tope de ${CATCH_UP_MAX_PAGES} páginas sin encontrar un correo ya importado — puede quedar backlog más antiguo por traer, el próximo ciclo sigue avanzando.`
-      );
-    }
+  } catch (error) {
+    // No relanzar el error de gaxios/googleapis tal cual: trae el cuerpo
+    // crudo de la request (incluido el refresh_token) — ver
+    // src/lib/gmail/errors.ts.
+    throw new Error(describeGoogleApiError(error));
   }
 
   if (imported > 0) {
