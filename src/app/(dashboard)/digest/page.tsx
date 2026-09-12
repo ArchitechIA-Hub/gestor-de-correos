@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { CURRENT_USER_NAME } from "@/lib/config";
@@ -7,27 +6,9 @@ import { cn } from "@/lib/utils";
 import { getAppSettings, getUserTimeZone } from "@/lib/settings";
 import { formatLongDate } from "@/lib/format/date";
 import { SendDigestControl } from "@/components/digest/send-digest-control";
+import { getDigestData, DIGEST_STATUS_LABELS, suggestedDigestAction } from "@/lib/digest/get-digest-data";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABELS: Record<string, string> = {
-  UNCLASSIFIED: "Sin clasificar",
-  CLASSIFIED: "Clasificado",
-  ARCHIVED: "Archivado",
-};
-
-function suggestedAction(params: {
-  isUrgent: boolean;
-  hasPendingDraft: boolean;
-  hasApprovedDraft: boolean;
-  hasCommitment: boolean;
-}) {
-  if (params.isUrgent) return "Responder ya — vence en <48h";
-  if (params.hasApprovedDraft) return "Listo para enviar (fuera de alcance del prototipo)";
-  if (params.hasPendingDraft) return "Revisar y aprobar borrador";
-  if (params.hasCommitment) return "Generar borrador";
-  return "Sin acción requerida";
-}
 
 export default async function DigestPage({
   searchParams,
@@ -36,37 +17,9 @@ export default async function DigestPage({
 }) {
   const { range } = await searchParams;
   const isWeekly = range !== "daily";
-  const rangeStart = new Date(Date.now() - (isWeekly ? 7 : 1) * 24 * 60 * 60 * 1000);
-  const rangeEnd = new Date();
 
-  const emails = await prisma.email.findMany({
-    where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false, category: null },
-    include: {
-      sender: true,
-      commitments: { orderBy: { dueAt: "asc" }, take: 1 },
-      drafts: { orderBy: { generatedAt: "desc" }, take: 1 },
-    },
-    orderBy: [{ priorityScore: "desc" }, { receivedAt: "desc" }],
-  });
-
-  const [activeCommitments, overdueCommitments, vipSendersUnanswered, appSettings] = await Promise.all([
-    prisma.commitment.count({ where: { status: "PENDING" } }),
-    prisma.commitment.count({ where: { status: "OVERDUE" } }),
-    prisma.sender.findMany({
-      where: {
-        isVip: true,
-        emails: { some: { drafts: { none: { status: "APPROVED" } } } },
-      },
-      include: {
-        emails: {
-          where: { drafts: { none: { status: "APPROVED" } } },
-          orderBy: { receivedAt: "desc" },
-          take: 1,
-        },
-      },
-    }),
-    getAppSettings(),
-  ]);
+  const [{ rangeStart, rangeEnd, emails, activeCommitments, overdueCommitments, vipSendersUnanswered }, appSettings] =
+    await Promise.all([getDigestData(isWeekly ? "weekly" : "daily"), getAppSettings()]);
 
   const tz = await getUserTimeZone();
 
@@ -153,10 +106,10 @@ export default async function DigestPage({
                       <span className="line-clamp-1 text-sm">{commitment?.description ?? "—"}</span>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {STATUS_LABELS[email.status] ?? email.status}
+                      {DIGEST_STATUS_LABELS[email.status] ?? email.status}
                     </TableCell>
                     <TableCell className="max-w-[14rem] text-sm">
-                      {suggestedAction({
+                      {suggestedDigestAction({
                         isUrgent: email.isUrgent,
                         hasPendingDraft: latestDraft?.status === "PENDING_REVIEW",
                         hasApprovedDraft: latestDraft?.status === "APPROVED",

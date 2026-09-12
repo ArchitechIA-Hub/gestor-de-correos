@@ -2,35 +2,56 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { getAppSettings } from "@/lib/settings";
+import { getAppSettings, getUserTimeZone } from "@/lib/settings";
 import { recordAuditEvent } from "@/lib/audit/record";
+import { getDigestData, type DigestRange } from "@/lib/digest/get-digest-data";
+import { renderDigestEmailHtml } from "@/lib/digest/render-email-html";
+import { sendGmailMessage } from "@/lib/gmail/send";
+import { describeGoogleApiError } from "@/lib/gmail/errors";
+import { CURRENT_USER_NAME } from "@/lib/config";
+import type { AuditPerformer } from "@/generated/prisma/enums";
 
 export type SendDigestInput = {
-  range: "daily" | "weekly";
+  range: DigestRange;
 };
 
 /**
- * Simula el envío del digest: no hay proveedor de correo real conectado en
- * este prototipo (decisión de alcance para el MVP), así que esta acción
- * registra el envío como una acción auditable en vez de despachar un correo
- * de verdad. Requiere que el usuario haya confirmado explícitamente (el
- * diálogo de confirmación en la UI cumple la regla de "acción irreversible
- * requiere confirmación humana antes de ejecutarse").
+ * Envía el Informe (digest) real por correo vía Gmail (`gmail.send`, ya
+ * autorizado — se usa igual para respuestas de borradores). `performedBy`
+ * distingue el envío manual desde el botón (USER, con confirmación explícita
+ * en la UI) del ciclo automático semanal (SYSTEM, ver
+ * src/lib/scheduler/auto-digest.ts) — ambos quedan auditados igual.
  */
-export async function sendDigest(input: SendDigestInput) {
+export async function sendDigest(input: SendDigestInput, performedBy: AuditPerformer = "USER") {
   const settings = await getAppSettings();
   if (!settings.digestRecipientEmail) {
     throw new Error("No hay un destinatario configurado para el digest.");
   }
 
-  const rangeStart = new Date(Date.now() - (input.range === "weekly" ? 7 : 1) * 24 * 60 * 60 * 1000);
-  const rangeEnd = new Date();
+  const mailAccount = await prisma.mailAccount.findFirst({
+    where: { provider: "gmail", isActive: true, googleRefreshToken: { not: null } },
+  });
+  if (!mailAccount) {
+    throw new Error("No hay ninguna cuenta de Gmail conectada para enviar el informe.");
+  }
 
-  const [emailsInRange, activeCommitments, overdueCommitments] = await Promise.all([
-    prisma.email.count({ where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false } }),
-    prisma.commitment.count({ where: { status: "PENDING" } }),
-    prisma.commitment.count({ where: { status: "OVERDUE" } }),
-  ]);
+  const [data, timeZone] = await Promise.all([getDigestData(input.range), getUserTimeZone()]);
+  const html = renderDigestEmailHtml(data, timeZone);
+  const subject = `Informe ${input.range === "weekly" ? "semanal" : "diario"} de ${CURRENT_USER_NAME}`;
+
+  let gmailMessageId: string;
+  try {
+    gmailMessageId = await sendGmailMessage({
+      mailAccount,
+      to: settings.digestRecipientEmail,
+      subject,
+      html,
+    });
+  } catch (error) {
+    // No relanzar el error de gaxios/googleapis tal cual — ver
+    // src/lib/gmail/errors.ts.
+    throw new Error(describeGoogleApiError(error));
+  }
 
   const sentAt = new Date();
 
@@ -41,13 +62,14 @@ export async function sendDigest(input: SendDigestInput) {
     payloadAfter: {
       recipientEmail: settings.digestRecipientEmail,
       range: input.range,
-      rangeStart,
-      rangeEnd,
-      emailsInRange,
-      activeCommitments,
-      overdueCommitments,
+      rangeStart: data.rangeStart,
+      rangeEnd: data.rangeEnd,
+      emailsInRange: data.emails.length,
+      activeCommitments: data.activeCommitments,
+      overdueCommitments: data.overdueCommitments,
+      gmailMessageId,
     },
-    performedBy: "USER",
+    performedBy,
     reversible: false,
   });
 

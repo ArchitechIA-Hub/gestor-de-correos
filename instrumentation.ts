@@ -3,4 +3,7 @@ export async function register() {
 
   const { startAutoScanScheduler } = await import("@/lib/scheduler/auto-scan");
   startAutoScanScheduler();
+
+  const { startAutoDigestScheduler } = await import("@/lib/scheduler/auto-digest");
+  startAutoDigestScheduler();
 }

@@ -54,6 +54,15 @@ function buildPlainMessage(headers: string[], body: string): string {
   ].join("\r\n")}\r\n\r\n${body}`;
 }
 
+function buildHtmlMessage(headers: string[], html: string): string {
+  return `${[
+    ...headers,
+    "MIME-Version: 1.0",
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: 8bit",
+  ].join("\r\n")}\r\n\r\n${html}`;
+}
+
 function buildMultipartMessage(headers: string[], body: string, attachments: OutgoingAttachment[]): string {
   const boundary = `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
   const parts: string[] = [
@@ -120,6 +129,34 @@ export async function sendGmailReply(params: SendGmailReplyParams): Promise<stri
   const response = await gmail.users.messages.send({
     userId: "me",
     requestBody: { raw: encodeBase64Url(message), threadId: params.threadId },
+  });
+
+  if (!response.data.id) {
+    throw new Error("Gmail no devolvió un id de mensaje al enviar.");
+  }
+  return response.data.id;
+}
+
+export type SendGmailMessageParams = {
+  mailAccount: Pick<MailAccountModel, "googleRefreshToken">;
+  to: string;
+  subject: string;
+  html: string;
+};
+
+/**
+ * Envía un correo nuevo vía la API de Gmail — a diferencia de
+ * `sendGmailReply`, no es una respuesta dentro de un hilo existente (sin
+ * `threadId`/`In-Reply-To`). Usado para el Informe/digest periódico.
+ */
+export async function sendGmailMessage(params: SendGmailMessageParams): Promise<string> {
+  const gmail = getGmailClientForAccount(params.mailAccount);
+  const headers = [`To: ${params.to}`, `Subject: ${encodeHeaderUtf8(params.subject)}`];
+  const message = buildHtmlMessage(headers, params.html);
+
+  const response = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw: encodeBase64Url(message) },
   });
 
   if (!response.data.id) {

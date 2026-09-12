@@ -53,8 +53,8 @@ export function SendDigestControl({
           `Enviado a ${result.recipientEmail} · ${formatTime(result.sentAt, timeZone)}`
         );
         setOpen(false);
-      } catch {
-        setError("No se pudo enviar el informe. Configura un destinatario válido primero.");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "No se pudo enviar el informe.");
         setOpen(false);
       }
     });
@@ -87,9 +87,8 @@ export function SendDigestControl({
             <DialogHeader>
               <DialogTitle>¿Enviar este informe?</DialogTitle>
               <DialogDescription>
-                Se enviará a <strong>{savedRecipient}</strong>. Nota: este prototipo no tiene un proveedor de
-                correo real conectado — el envío queda registrado en el log de auditoría, no se despacha un
-                correo de verdad todavía.
+                Se enviará un correo real a <strong>{savedRecipient}</strong> desde la cuenta de Gmail conectada.
+                Esta acción queda registrada en el log de auditoría.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
