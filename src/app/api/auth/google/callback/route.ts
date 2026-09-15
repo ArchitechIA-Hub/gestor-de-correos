@@ -5,6 +5,7 @@ import { recordAuditEvent } from "@/lib/audit/record";
 import { exchangeCodeForTokens, getAuthenticatedGmailProfile } from "@/lib/gmail/client";
 import { verifyGmailOAuthState } from "@/lib/gmail/oauth-state";
 import { describeGoogleApiError } from "@/lib/gmail/errors";
+import { encrypt } from "@/lib/crypto/encryption";
 
 /**
  * Callback del consentimiento OAuth de Google. Intercambia el `code` por
@@ -72,6 +73,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/settings/accounts?gmail_error=cuenta_ya_conectada", appOrigin));
   }
 
+  // Cifrado en reposo (AES-256-GCM) — ver src/lib/crypto/encryption.ts. El
+  // único lugar que necesita el valor real es getGmailClientForAccount, que
+  // lo descifra ahí mismo. Si falta ENCRYPTION_KEY en este entorno, mejor
+  // fallar el flujo con un error legible que guardar el refresh token sin
+  // cifrar o tumbar la request con un 500 crudo.
+  let encryptedRefreshToken: string;
+  try {
+    encryptedRefreshToken = encrypt(tokens.refresh_token);
+  } catch (error) {
+    console.error("[oauth] fallo al cifrar el refresh token:", error instanceof Error ? error.message : error);
+    return NextResponse.redirect(new URL("/settings/accounts?gmail_error=config_cifrado", appOrigin));
+  }
+
   const account = await prisma.mailAccount.upsert({
     where: { emailAddress },
     create: {
@@ -80,12 +94,12 @@ export async function GET(request: NextRequest) {
       label: emailAddress,
       provider: "gmail",
       isActive: true,
-      googleRefreshToken: tokens.refresh_token,
+      googleRefreshToken: encryptedRefreshToken,
     },
     update: {
       provider: "gmail",
       isActive: true,
-      googleRefreshToken: tokens.refresh_token,
+      googleRefreshToken: encryptedRefreshToken,
     },
   });
 

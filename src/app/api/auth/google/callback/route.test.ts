@@ -56,6 +56,9 @@ function redirectPath(response: Response): string {
 beforeEach(async () => {
   process.env.SESSION_SECRET = "test-secret-para-oauth-state";
   process.env.GOOGLE_REDIRECT_URI = "http://localhost:3000/api/auth/google/callback";
+  // El callback cifra el refresh_token de verdad (no está mockeado) antes de
+  // guardarlo — ver src/lib/crypto/encryption.ts.
+  process.env.ENCRYPTION_KEY = Buffer.from("f".repeat(32)).toString("base64");
   await resetDb();
   const organization = await prisma.organization.create({ data: { name: "Org de prueba" } });
   const other = await prisma.organization.create({ data: { name: "Otra org" } });
