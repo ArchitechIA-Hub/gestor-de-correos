@@ -49,7 +49,12 @@ export default async function LoginPage({
           />
         </div>
 
-        {error && <p className="text-xs text-urgent">Correo o contraseña incorrectos. Intenta de nuevo.</p>}
+        {error === "2" && (
+          <p className="text-xs text-urgent">Demasiados intentos. Espera unos minutos y vuelve a intentar.</p>
+        )}
+        {error && error !== "2" && (
+          <p className="text-xs text-urgent">Correo o contraseña incorrectos. Intenta de nuevo.</p>
+        )}
 
         <button
           type="submit"
