@@ -8,12 +8,12 @@ import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getUnreadUrgentAlerts } from "@/lib/alerts";
 import { getUserTimeZone } from "@/lib/settings";
 import { logout } from "@/app/login/actions";
-import { requireSession } from "@/lib/auth/session";
+import { requireActiveSession } from "@/lib/auth/current-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { organizationId } = await requireSession();
+  const { organizationId } = await requireActiveSession();
   const [{ features }, unreadAlerts, timeZone] = await Promise.all([
     getCurrentServiceLevel(organizationId),
     getUnreadUrgentAlerts(organizationId),

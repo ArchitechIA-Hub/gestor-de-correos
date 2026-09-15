@@ -64,7 +64,19 @@ export async function POST(request: Request) {
       }
     }
 
-    const scanResult = await runScanCycle(organizationId);
+    let scanResult;
+    try {
+      scanResult = await runScanCycle(organizationId);
+    } catch (error) {
+      // Un fallo clasificando el backlog de ESTA organización (ej. OpenAI
+      // caído, salida estructurada inválida) no debe saltarse el resto de
+      // organizaciones del mismo tick — antes de este fix, una excepción acá
+      // se propagaba hasta el handler y el `for` nunca llegaba a las demás.
+      const message = error instanceof Error ? error.message : "Error desconocido";
+      console.error(`[scan] runScanCycle falló para la organización ${organizationId}:`, error);
+      results.push({ organizationId, error: message });
+      continue;
+    }
 
     try {
       await recomputeOpenCommitmentPriorities(organizationId);

@@ -60,24 +60,40 @@ export async function sendDigestForOrganization(
 
   const sentAt = new Date();
 
-  await recordAuditEvent({
-    organizationId,
-    actionType: "SEND_DIGEST",
-    entityType: "Digest",
-    entityId: `${range}-${sentAt.toISOString()}`,
-    payloadAfter: {
-      recipientEmail: settings.digestRecipientEmail,
-      range,
-      rangeStart: data.rangeStart,
-      rangeEnd: data.rangeEnd,
-      emailsInRange: data.emails.length,
-      activeCommitments: data.activeCommitments,
-      overdueCommitments: data.overdueCommitments,
-      gmailMessageId,
-    },
-    performedBy,
-    reversible: false,
-  });
+  // El correo del Informe YA SALIÓ por Gmail en este punto. Esta entrada de
+  // auditoría no es solo un registro — es el GATE que usa
+  // /api/send-digest/route.ts para decidir "¿ya le tocó esta semana?" (vía
+  // getNextWeeklyOccurrence sobre el SEND_DIGEST más reciente). Si falla acá
+  // sin que quede constancia, el próximo tick del scheduler (cada 20 min)
+  // vuelve a creer que toca enviar y reenvía el mismo Informe al cliente una
+  // y otra vez — de ahí el log en mayúsculas: esto necesita corrección manual
+  // ya mismo, no pasar desapercibido en el resto de logs.
+  try {
+    await recordAuditEvent({
+      organizationId,
+      actionType: "SEND_DIGEST",
+      entityType: "Digest",
+      entityId: `${range}-${sentAt.toISOString()}`,
+      payloadAfter: {
+        recipientEmail: settings.digestRecipientEmail,
+        range,
+        rangeStart: data.rangeStart,
+        rangeEnd: data.rangeEnd,
+        emailsInRange: data.emails.length,
+        activeCommitments: data.activeCommitments,
+        overdueCommitments: data.overdueCommitments,
+        gmailMessageId,
+      },
+      performedBy,
+      reversible: false,
+    });
+  } catch (error) {
+    console.error(
+      `[send-digest] URGENTE: el Informe (${range}) YA SE ENVIÓ por Gmail a ${settings.digestRecipientEmail} (org ${organizationId}, mensaje ${gmailMessageId}) pero falló el registro de auditoría que evita reenvíos duplicados — revisar y corregir a mano:`,
+      error
+    );
+    throw error;
+  }
 
   return { sentAt, recipientEmail: settings.digestRecipientEmail };
 }

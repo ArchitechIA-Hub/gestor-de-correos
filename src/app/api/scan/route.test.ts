@@ -8,7 +8,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("@/lib/ai/extract-commitments", () => ({ extractCommitments: vi.fn() }));
 
 import { prisma } from "@/lib/db/prisma";
+import { extractCommitments } from "@/lib/ai/extract-commitments";
 import { POST } from "./route";
+
+const mockedExtractCommitments = vi.mocked(extractCommitments);
 
 /**
  * Verificación de la Fase 4 (scheduler por organización, ver
@@ -44,6 +47,7 @@ function request(): Request {
 beforeEach(async () => {
   delete process.env.INTERNAL_SCAN_SECRET;
   await resetDb();
+  mockedExtractCommitments.mockReset();
 });
 
 describe("POST /api/scan", () => {
@@ -113,5 +117,52 @@ describe("POST /api/scan", () => {
     process.env.INTERNAL_SCAN_SECRET = "correcto";
     const response = await POST(request());
     expect(response.status).toBe(401);
+  });
+
+  it("un fallo clasificando el backlog de una organización no bloquea el escaneo de las demás", async () => {
+    const failing = await prisma.organization.create({ data: { name: "Falla al clasificar" } });
+    const healthy = await prisma.organization.create({ data: { name: "Sana" } });
+
+    // `failing` necesita un correo UNCLASSIFIED real para que runScanCycle
+    // llegue a llamar extractCommitments (con backlog 0 el ciclo ni lo toca).
+    const account = await prisma.mailAccount.create({
+      data: { organizationId: failing.id, emailAddress: "cuenta@test.local", label: "Cuenta" },
+    });
+    const sender = await prisma.sender.create({
+      data: { organizationId: failing.id, email: "remitente@test.local", name: "Remitente" },
+    });
+    await prisma.email.create({
+      data: {
+        organizationId: failing.id,
+        senderId: sender.id,
+        mailAccountId: account.id,
+        threadId: "thread-1",
+        subject: "Asunto",
+        rawBody: "Cuerpo",
+        receivedAt: new Date(),
+        status: "UNCLASSIFIED",
+      },
+    });
+
+    mockedExtractCommitments.mockRejectedValue(new Error("OpenAI caído"));
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    const failingResult = body.organizations.find(
+      (r: { organizationId: string }) => r.organizationId === failing.id
+    );
+    expect(failingResult?.error).toBeTruthy();
+
+    const healthyResult = body.organizations.find(
+      (r: { organizationId: string }) => r.organizationId === healthy.id
+    );
+    expect(healthyResult).toBeDefined();
+    expect(healthyResult.error).toBeUndefined();
+
+    // La organización que falló no completó el ciclo, así que no debe tener
+    // ScanCycleLog; la sana sí.
+    expect(await prisma.scanCycleLog.count({ where: { organizationId: failing.id } })).toBe(0);
+    expect(await prisma.scanCycleLog.count({ where: { organizationId: healthy.id } })).toBe(1);
   });
 });

@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/db/prisma";
 import { computePriorityScore, isUrgentByDeadline } from "./engine";
 import { recordAuditEvent } from "@/lib/audit/record";
+import { createUrgentAlert } from "@/lib/alerts";
+import { sendWhatsAppNotification } from "@/lib/whatsapp";
+import { getExtraConfig } from "@/lib/extras";
 
 /**
  * Recálculo periódico de correos ya clasificados con un compromiso abierto
@@ -12,12 +15,18 @@ import { recordAuditEvent } from "@/lib/audit/record";
  *
  * Solo escribe (y audita) los correos cuyo `isUrgent` realmente cambió, para
  * no generar ruido de auditoría por variaciones de score que no cambian nada
- * visible para el usuario.
+ * visible para el usuario. Cuando `isUrgent` pasa de false a true, dispara
+ * también la alerta push (y WhatsApp si el extra está activo) — antes esto
+ * solo pasaba en `run-cycle.ts` al clasificar por primera vez, así que un
+ * compromiso que se volvía urgente por el simple paso del tiempo nunca
+ * notificaba al usuario, aunque el invariante de CLAUDE.md ("dispara
+ * notificación inmediata... incluso en Nivel 1") no distingue el motivo.
  */
 export async function recomputeOpenCommitmentPriorities(
   organizationId: string,
   now: Date = new Date()
 ): Promise<{ updated: number }> {
+  const extraConfig = await getExtraConfig(organizationId);
   const emails = await prisma.email.findMany({
     where: {
       organizationId,
@@ -60,6 +69,39 @@ export async function recomputeOpenCommitmentPriorities(
         payloadAfter: { priorityScore, isUrgent, reason: "recálculo periódico por paso del tiempo" },
         performedBy: "SYSTEM",
       });
+
+      // Solo al pasar a urgente (no al dejar de serlo, ver decision de que el
+      // peso de urgencia cae a 0 sin alerta nueva) — mismo patrón que
+      // run-cycle.ts al clasificar por primera vez.
+      if (isUrgent) {
+        const nearestCommitment = email.commitments[0] ?? null;
+
+        await recordAuditEvent({
+          organizationId,
+          actionType: "MARK_URGENT",
+          entityType: "Email",
+          entityId: email.id,
+          payloadBefore: { isUrgent: false },
+          payloadAfter: { isUrgent: true, reason: "vencimiento <48h (recálculo periódico)" },
+        });
+
+        await createUrgentAlert({
+          organizationId,
+          emailId: email.id,
+          subject: email.subject,
+          senderName: email.sender.name,
+          commitmentId: nearestCommitment?.id,
+          dueAt: nearestDueAt,
+        });
+
+        if (extraConfig.whatsappEnabled && nearestCommitment) {
+          await sendWhatsAppNotification({
+            organizationId,
+            commitmentId: nearestCommitment.id,
+            message: `${email.sender.name}: "${email.subject}" vence en menos de 48h`,
+          });
+        }
+      }
     }
   }
 

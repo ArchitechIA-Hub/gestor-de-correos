@@ -47,39 +47,57 @@ export async function approveDraft(draftId: string, attachments: OutgoingAttachm
   }
   const attachmentNames = attachments.map((a) => a.filename);
 
-  const [updated] = await prisma.$transaction([
-    prisma.draft.update({
-      where: { id: draftId },
-      data: { status: "APPROVED", approvedAt: respondedAt },
-    }),
-    // Aprobar un borrador es la única acción del prototipo que representa
-    // "ya se le respondió a este correo" — sin esto, el correo se quedaba
-    // viéndose como pendiente para siempre aunque ya tuviera una respuesta
-    // aprobada (afectaba /inbox, el digest y el SLA de VIP).
-    prisma.email.update({
-      where: { id: draft.emailId },
-      data: { respondedAt },
-    }),
-  ]);
+  // Si `sentMessageId` ya existe, el correo real YA SALIÓ por Gmail — todo lo
+  // que sigue es dejar constancia de eso. Un fallo de la base de datos justo
+  // acá (poco probable, pero posible) no debe pasar en silencio: sin este
+  // try/catch, el borrador se quedaba viéndose "pendiente de revisión" pese a
+  // haberse enviado de verdad, invitando a un segundo clic que reenviaría el
+  // mismo correo, y sin ningún rastro en el log de auditoría de que el primer
+  // envío ocurrió.
+  let updated;
+  try {
+    [updated] = await prisma.$transaction([
+      prisma.draft.update({
+        where: { id: draftId },
+        data: { status: "APPROVED", approvedAt: respondedAt },
+      }),
+      // Aprobar un borrador es la única acción del prototipo que representa
+      // "ya se le respondió a este correo" — sin esto, el correo se quedaba
+      // viéndose como pendiente para siempre aunque ya tuviera una respuesta
+      // aprobada (afectaba /inbox, el digest y el SLA de VIP).
+      prisma.email.update({
+        where: { id: draft.emailId },
+        data: { respondedAt },
+      }),
+    ]);
 
-  await recordAuditEvent({
-    organizationId,
-    actionType: sentMessageId ? "SEND_DRAFT" : "APPROVE_DRAFT",
-    entityType: "Draft",
-    entityId: draftId,
-    payloadBefore: { status: draft.status },
-    payloadAfter: sentMessageId
-      ? {
-          status: "APPROVED",
-          to: draft.email.sender.email,
-          subject: draft.email.subject,
-          sentMessageId,
-          ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
-        }
-      : { status: "APPROVED" },
-    performedBy: "USER",
-    reversible: false,
-  });
+    await recordAuditEvent({
+      organizationId,
+      actionType: sentMessageId ? "SEND_DRAFT" : "APPROVE_DRAFT",
+      entityType: "Draft",
+      entityId: draftId,
+      payloadBefore: { status: draft.status },
+      payloadAfter: sentMessageId
+        ? {
+            status: "APPROVED",
+            to: draft.email.sender.email,
+            subject: draft.email.subject,
+            sentMessageId,
+            ...(attachmentNames.length > 0 ? { attachments: attachmentNames } : {}),
+          }
+        : { status: "APPROVED" },
+      performedBy: "USER",
+      reversible: false,
+    });
+  } catch (error) {
+    if (sentMessageId) {
+      console.error(
+        `[approve-draft] URGENTE: el correo YA SE ENVIÓ por Gmail (draft ${draftId}, mensaje ${sentMessageId}, para ${draft.email.sender.email}) pero falló al persistir el estado/auditoría — revisar y corregir a mano para evitar un reenvío duplicado:`,
+        error
+      );
+    }
+    throw error;
+  }
 
   // Responder a un correo es la señal más directa de que su compromiso ya se
   // atendió: se auto-completa el más próximo abierto, sin que el usuario

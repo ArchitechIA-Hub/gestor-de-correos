@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { requireSession } from "@/lib/auth/session";
 import { getGmailClientForAccount } from "@/lib/gmail/client";
+import { describeGoogleApiError } from "@/lib/gmail/errors";
 
 /**
  * Sirve un adjunto real bajo demanda: los bytes no se guardan en nuestra BD
@@ -26,12 +27,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Este correo no proviene de Gmail." }, { status: 400 });
   }
 
-  const gmail = getGmailClientForAccount(attachment.email.mailAccount);
-  const { data } = await gmail.users.messages.attachments.get({
-    userId: "me",
-    messageId: attachment.email.gmailMessageId,
-    id: attachment.gmailAttachmentId,
-  });
+  let data;
+  try {
+    const gmail = getGmailClientForAccount(attachment.email.mailAccount);
+    ({ data } = await gmail.users.messages.attachments.get({
+      userId: "me",
+      messageId: attachment.email.gmailMessageId,
+      id: attachment.gmailAttachmentId,
+    }));
+  } catch (error) {
+    // No dejar propagar el error de gaxios/googleapis tal cual — puede traer
+    // el refresh_token en el cuerpo crudo de la request (ver
+    // src/lib/gmail/errors.ts, mismo criterio que el resto de llamadas a la
+    // API de Gmail en el repo).
+    console.error("[attachments] fallo al pedir el adjunto a Gmail:", describeGoogleApiError(error));
+    return NextResponse.json({ error: "No se pudo obtener el adjunto de Gmail." }, { status: 502 });
+  }
 
   if (!data.data) {
     return NextResponse.json({ error: "No se pudo obtener el contenido del adjunto." }, { status: 502 });
