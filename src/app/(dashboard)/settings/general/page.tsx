@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { prisma } from "@/lib/db/prisma";
 import { TimeZoneForm } from "@/components/settings/timezone-form";
 import { ProfileForm } from "@/components/settings/profile-form";
+import { ChangePasswordForm } from "@/components/settings/change-password-form";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function GeneralSettingsPage() {
       </div>
 
       <ProfileForm currentUserName={user.name} currentOrganizationName={organization.name} />
+      <ChangePasswordForm />
       <TimeZoneForm currentTimeZone={settings.timeZone} />
     </div>
   );

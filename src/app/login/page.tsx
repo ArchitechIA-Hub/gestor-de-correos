@@ -56,6 +56,11 @@ export default async function LoginPage({
           <p className="text-xs text-urgent">Correo o contraseña incorrectos. Intenta de nuevo.</p>
         )}
 
+        <p className="text-xs text-muted-foreground">
+          ¿Olvidaste tu contraseña? Contacta a quien te dio acceso a esta cuenta para que te ayude
+          a restablecerla.
+        </p>
+
         <button
           type="submit"
           className="h-9 rounded-lg bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
