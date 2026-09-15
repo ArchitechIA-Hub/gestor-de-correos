@@ -8,14 +8,16 @@ import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getUnreadUrgentAlerts } from "@/lib/alerts";
 import { getUserTimeZone } from "@/lib/settings";
 import { logout } from "@/app/login/actions";
+import { requireSession } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { organizationId } = await requireSession();
   const [{ features }, unreadAlerts, timeZone] = await Promise.all([
-    getCurrentServiceLevel(),
-    getUnreadUrgentAlerts(),
-    getUserTimeZone(),
+    getCurrentServiceLevel(organizationId),
+    getUnreadUrgentAlerts(organizationId),
+    getUserTimeZone(organizationId),
   ]);
 
   return (
@@ -48,16 +50,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
               />
               <ServiceLevelBadge />
               <ThemeToggle />
-              {process.env.DEMO_PASSWORD && (
-                <form action={logout}>
-                  <button
-                    type="submit"
-                    className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
-                  >
-                    Cerrar sesión
-                  </button>
-                </form>
-              )}
+              <form action={logout}>
+                <button
+                  type="submit"
+                  className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                >
+                  Cerrar sesión
+                </button>
+              </form>
             </div>
           </div>
         </header>

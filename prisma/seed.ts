@@ -14,13 +14,21 @@ const TOTAL_EMAILS = 180;
 const UNCLASSIFIED_COUNT = 60;
 
 async function main() {
+  // Reutiliza la primera Organization si ya existe (p. ej. la creada por
+  // prisma/backfill-organization.ts) en vez de crear una segunda por
+  // accidente al re-sembrar sobre una base ya multi-tenant.
+  const organization =
+    (await prisma.organization.findFirst()) ??
+    (await prisma.organization.create({ data: { name: "Daniel Martínez" } }));
+
   console.log("Sembrando remitentes...");
   const senderRecords = new Map<string, string>(); // email -> id
   for (const sender of MOCK_SENDERS) {
     const record = await prisma.sender.upsert({
-      where: { email: sender.email },
+      where: { organizationId_email: { organizationId: organization.id, email: sender.email } },
       update: {},
       create: {
+        organizationId: organization.id,
         email: sender.email,
         name: sender.name,
         isVip: sender.isVip,
@@ -37,14 +45,14 @@ async function main() {
     const record = await prisma.mailAccount.upsert({
       where: { emailAddress: account.emailAddress },
       update: {},
-      create: { emailAddress: account.emailAddress, label: account.label },
+      create: { organizationId: organization.id, emailAddress: account.emailAddress, label: account.label },
     });
     accountRecords.set(account.emailAddress, record.id);
   }
 
   console.log("Configuración de extras por defecto...");
-  await prisma.extraConfig.deleteMany();
-  await prisma.extraConfig.create({ data: {} });
+  await prisma.extraConfig.deleteMany({ where: { organizationId: organization.id } });
+  await prisma.extraConfig.create({ data: { organizationId: organization.id } });
 
   console.log(`Generando ${TOTAL_EMAILS} correos de ejemplo...`);
   const generated = generateMockEmails(TOTAL_EMAILS, NOW);
@@ -78,6 +86,7 @@ async function main() {
 
     const email = await prisma.email.create({
       data: {
+        organizationId: organization.id,
         senderId,
         mailAccountId,
         threadId: item.threadId,
@@ -98,6 +107,7 @@ async function main() {
       const after = JSON.stringify({ status: "ARCHIVED", isMarketing: true });
       await prisma.auditLogEntry.create({
         data: {
+          organizationId: organization.id,
           actionType: "CLASSIFY",
           entityType: "Email",
           entityId: email.id,
@@ -109,6 +119,7 @@ async function main() {
       });
       await prisma.auditLogEntry.create({
         data: {
+          organizationId: organization.id,
           actionType: "MARK_MARKETING",
           entityType: "Email",
           entityId: email.id,
@@ -121,6 +132,7 @@ async function main() {
     } else if (!isUnclassified) {
       await prisma.auditLogEntry.create({
         data: {
+          organizationId: organization.id,
           actionType: "CLASSIFY",
           entityType: "Email",
           entityId: email.id,
@@ -146,6 +158,7 @@ async function main() {
 
         await prisma.auditLogEntry.create({
           data: {
+            organizationId: organization.id,
             actionType: "DETECT_COMMITMENT",
             entityType: "Commitment",
             entityId: created.id,
@@ -159,6 +172,7 @@ async function main() {
       if (isUrgent) {
         await prisma.auditLogEntry.create({
           data: {
+            organizationId: organization.id,
             actionType: "MARK_URGENT",
             entityType: "Email",
             entityId: email.id,

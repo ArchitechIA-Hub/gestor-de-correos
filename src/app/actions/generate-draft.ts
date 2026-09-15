@@ -2,18 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { generateDraft as generateDraftText } from "@/lib/ai/generate-draft";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { OPENAI_MODEL } from "@/lib/ai/client";
 import type { DraftResponseType } from "@/generated/prisma/enums";
 
 export async function generateDraftForEmail(emailId: string, responseType: DraftResponseType) {
-  const email = await prisma.email.findUniqueOrThrow({
-    where: { id: emailId },
-    include: { sender: true, commitments: true },
-  });
+  const { organizationId } = await requireSession();
 
-  const config = await prisma.extraConfig.findFirst();
+  // findFirstOrThrow (no findUniqueOrThrow) para poder combinar el id con el
+  // filtro de organización — un emailId de otra organización se trata igual
+  // que uno inexistente.
+  const [email, config, organization] = await Promise.all([
+    prisma.email.findFirstOrThrow({
+      where: { id: emailId, organizationId },
+      include: { sender: true, commitments: true },
+    }),
+    prisma.extraConfig.findFirst({ where: { organizationId } }),
+    prisma.organization.findUniqueOrThrow({ where: { id: organizationId } }),
+  ]);
 
   const content = await generateDraftText({
     senderName: email.sender.name,
@@ -22,6 +30,7 @@ export async function generateDraftForEmail(emailId: string, responseType: Draft
     commitmentDescriptions: email.commitments.map((c) => c.description),
     tone: config?.autoDraftToneEnabled ? "cordial, ejecutivo, directo, sin rodeos" : undefined,
     responseType,
+    signerName: organization.name,
   });
 
   const draft = await prisma.draft.create({
@@ -35,6 +44,7 @@ export async function generateDraftForEmail(emailId: string, responseType: Draft
   });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "GENERATE_DRAFT",
     entityType: "Draft",
     entityId: draft.id,

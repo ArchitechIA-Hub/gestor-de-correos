@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { isValidEmail } from "@/lib/utils";
 import { recordAuditEvent } from "@/lib/audit/record";
 
 export async function createMailAccount(input: { emailAddress: string; label: string }) {
+  const { organizationId } = await requireSession();
   const emailAddress = input.emailAddress.trim();
   const label = input.label.trim();
 
@@ -17,10 +19,11 @@ export async function createMailAccount(input: { emailAddress: string; label: st
   }
 
   const account = await prisma.mailAccount.create({
-    data: { emailAddress, label },
+    data: { organizationId, emailAddress, label },
   });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "MANAGE_MAIL_ACCOUNT",
     entityType: "MailAccount",
     entityId: account.id,
@@ -36,12 +39,13 @@ export async function createMailAccount(input: { emailAddress: string; label: st
 }
 
 export async function renameMailAccount(id: string, label: string) {
+  const { organizationId } = await requireSession();
   const trimmed = label.trim();
   if (!trimmed) {
     throw new Error("La cuenta necesita un nombre.");
   }
 
-  const account = await prisma.mailAccount.findUniqueOrThrow({ where: { id } });
+  const account = await prisma.mailAccount.findFirstOrThrow({ where: { id, organizationId } });
   if (account.label === trimmed) {
     return account;
   }
@@ -49,6 +53,7 @@ export async function renameMailAccount(id: string, label: string) {
   const updated = await prisma.mailAccount.update({ where: { id }, data: { label: trimmed } });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "MANAGE_MAIL_ACCOUNT",
     entityType: "MailAccount",
     entityId: id,
@@ -65,12 +70,14 @@ export async function renameMailAccount(id: string, label: string) {
 }
 
 export async function setMailAccountActive(id: string, isActive: boolean) {
-  const account = await prisma.mailAccount.findUniqueOrThrow({ where: { id } });
+  const { organizationId } = await requireSession();
+  const account = await prisma.mailAccount.findFirstOrThrow({ where: { id, organizationId } });
   const before = { isActive: account.isActive };
 
   const updated = await prisma.mailAccount.update({ where: { id }, data: { isActive } });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "MANAGE_MAIL_ACCOUNT",
     entityType: "MailAccount",
     entityId: id,

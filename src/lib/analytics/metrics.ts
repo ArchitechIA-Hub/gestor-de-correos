@@ -6,15 +6,17 @@ export type AnalyticsSnapshot = {
   commitmentsOnTimePercentage: number | null;
 };
 
-export async function getAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
+// Draft/Commitment no llevan organizationId directo — se filtran vía el
+// join a Email, igual que en getUpcomingCalendarEvents/getRecentWhatsAppNotifications.
+export async function getAnalyticsSnapshot(organizationId: string): Promise<AnalyticsSnapshot> {
   const [approvedDrafts, pendingEmails, completedCommitments, overdueCommitments] = await Promise.all([
     prisma.draft.findMany({
-      where: { status: "APPROVED", approvedAt: { not: null } },
+      where: { status: "APPROVED", approvedAt: { not: null }, email: { organizationId } },
       include: { email: true },
     }),
-    prisma.email.findMany({ where: { status: { not: "ARCHIVED" } }, select: { receivedAt: true } }),
-    prisma.commitment.count({ where: { status: "COMPLETED" } }),
-    prisma.commitment.count({ where: { status: "OVERDUE" } }),
+    prisma.email.findMany({ where: { organizationId, status: { not: "ARCHIVED" } }, select: { receivedAt: true } }),
+    prisma.commitment.count({ where: { status: "COMPLETED", email: { organizationId } } }),
+    prisma.commitment.count({ where: { status: "OVERDUE", email: { organizationId } } }),
   ]);
 
   const avgResponseTimeHours = approvedDrafts.length

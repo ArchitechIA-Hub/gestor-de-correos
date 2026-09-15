@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { DraftResponseType } from "@/generated/prisma/enums";
+import { requireSession } from "@/lib/auth/session";
 import { getUserTimeZone } from "@/lib/settings";
 import { formatLongDateTime } from "@/lib/format/date";
 
@@ -25,16 +26,22 @@ function parseAttachmentNames(payloadAfter: string | null): string[] {
 }
 
 export default async function SentPage() {
+  const { organizationId } = await requireSession();
   const sentDrafts = await prisma.draft.findMany({
-    where: { status: "APPROVED", email: { mailAccount: { provider: "gmail" } } },
+    where: { status: "APPROVED", email: { organizationId, mailAccount: { provider: "gmail" } } },
     include: { email: { include: { sender: true } } },
     orderBy: { approvedAt: "desc" },
   });
 
-  const tz = await getUserTimeZone();
+  const tz = await getUserTimeZone(organizationId);
 
   const sendEvents = await prisma.auditLogEntry.findMany({
-    where: { actionType: "SEND_DRAFT", entityType: "Draft", entityId: { in: sentDrafts.map((d) => d.id) } },
+    where: {
+      organizationId,
+      actionType: "SEND_DRAFT",
+      entityType: "Draft",
+      entityId: { in: sentDrafts.map((d) => d.id) },
+    },
     orderBy: { createdAt: "desc" },
   });
   const attachmentsByDraftId = new Map<string, string[]>();

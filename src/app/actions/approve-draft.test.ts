@@ -2,12 +2,16 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/gmail/send", () => ({ sendGmailReply: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ requireSession: vi.fn() }));
 
 import { prisma } from "@/lib/db/prisma";
 import { sendGmailReply } from "@/lib/gmail/send";
+import { requireSession } from "@/lib/auth/session";
 import { approveDraft } from "./approve-draft";
 
 const mockedSendGmailReply = vi.mocked(sendGmailReply);
+const mockedRequireSession = vi.mocked(requireSession);
+let organizationId: string;
 
 async function resetDb() {
   await prisma.whatsAppNotification.deleteMany();
@@ -27,6 +31,7 @@ const HOUR_MS = 60 * 60 * 1000;
 async function seedDraft(accountOverrides: { provider?: string; googleRefreshToken?: string | null } = {}) {
   const account = await prisma.mailAccount.create({
     data: {
+      organizationId,
       emailAddress: "cuenta@test.local",
       label: "Cuenta de prueba",
       provider: accountOverrides.provider ?? "mock",
@@ -34,10 +39,11 @@ async function seedDraft(accountOverrides: { provider?: string; googleRefreshTok
     },
   });
   const sender = await prisma.sender.create({
-    data: { email: "remitente@test.local", name: "Remitente de Prueba" },
+    data: { organizationId, email: "remitente@test.local", name: "Remitente de Prueba" },
   });
   const email = await prisma.email.create({
     data: {
+      organizationId,
       senderId: sender.id,
       mailAccountId: account.id,
       threadId: "thread-1",
@@ -61,6 +67,9 @@ async function seedDraft(accountOverrides: { provider?: string; googleRefreshTok
 
 beforeEach(async () => {
   await resetDb();
+  const organization = await prisma.organization.create({ data: { name: "Organización de prueba" } });
+  organizationId = organization.id;
+  mockedRequireSession.mockResolvedValue({ userId: "test-user-id", organizationId });
   mockedSendGmailReply.mockReset();
 });
 

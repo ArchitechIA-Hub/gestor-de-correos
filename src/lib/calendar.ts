@@ -9,8 +9,14 @@ import { recordAuditEvent } from "@/lib/audit/record";
  * respeta el gating por extra). Sin proveedor real conectado (mismo caso que
  * WhatsApp), "provider" queda como mock.
  */
-export async function createCalendarEvent(params: { commitmentId: string; title: string; start: Date }) {
+export async function createCalendarEvent(params: {
+  organizationId: string;
+  commitmentId: string;
+  title: string;
+  start: Date;
+}) {
   const auditEntry = await recordAuditEvent({
+    organizationId: params.organizationId,
     actionType: "CREATE_CALENDAR_EVENT",
     entityType: "Commitment",
     entityId: params.commitmentId,
@@ -28,9 +34,11 @@ export async function createCalendarEvent(params: { commitmentId: string; title:
   });
 }
 
-export async function getUpcomingCalendarEvents(limit = 10) {
+// CalendarEvent no lleva organizationId directo (siempre se accede vía
+// Commitment → Email, que sí lo lleva) — se filtra por el join.
+export async function getUpcomingCalendarEvents(organizationId: string, limit = 10) {
   return prisma.calendarEvent.findMany({
-    where: { start: { gte: new Date() } },
+    where: { start: { gte: new Date() }, commitment: { email: { organizationId } } },
     include: { commitment: { include: { email: { include: { sender: true } } } } },
     orderBy: { start: "asc" },
     take: limit,

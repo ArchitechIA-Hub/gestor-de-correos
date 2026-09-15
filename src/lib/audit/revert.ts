@@ -7,9 +7,15 @@ export class AuditRevertError extends Error {}
 /**
  * Reversión centralizada de acciones automáticas. La lógica inversa depende
  * del actionType original; el propio revert también queda auditado.
+ *
+ * `AuditLogEntry.entityId` es un string libre sin FK real (a veces "Email", a
+ * veces "Digest" con un id sintético que no existe en ninguna tabla) — el
+ * ownership entre organizaciones se valida contra `entry.organizationId`
+ * directo, tratando una entrada de otra organización como "no encontrada"
+ * (nunca revelar que el id existe en otro tenant).
  */
-export async function revertAuditEvent(auditLogEntryId: string) {
-  const entry = await prisma.auditLogEntry.findUnique({ where: { id: auditLogEntryId } });
+export async function revertAuditEvent(organizationId: string, auditLogEntryId: string) {
+  const entry = await prisma.auditLogEntry.findFirst({ where: { id: auditLogEntryId, organizationId } });
   if (!entry) throw new AuditRevertError("Entrada de auditoría no encontrada.");
   if (!entry.reversible) throw new AuditRevertError("Esta acción no es reversible.");
   if (entry.revertedAt) throw new AuditRevertError("Esta acción ya fue revertida.");
@@ -73,6 +79,7 @@ export async function revertAuditEvent(auditLogEntryId: string) {
   await prisma.auditLogEntry.update({ where: { id: entry.id }, data: { revertedAt: new Date() } });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "REVERT",
     entityType: entry.entityType,
     entityId: entry.entityId,

@@ -3,6 +3,7 @@ import {
   URGENT_THRESHOLD_HOURS,
   FEATURES_UNLOCKED_FOR_ALL_LEVELS,
 } from "@/lib/priority/constants";
+import { requireSession } from "@/lib/auth/session";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { Badge } from "@/components/ui/badge";
 import { DevBacklogControls } from "@/components/settings/dev-backlog-controls";
@@ -16,14 +17,16 @@ export const dynamic = "force-dynamic";
 const RECENT_CYCLES_LIMIT = 10;
 
 export default async function ServiceLevelPage() {
-  const current = await getCurrentServiceLevel();
-  const timeZone = await getUserTimeZone();
+  const { organizationId } = await requireSession();
+  const current = await getCurrentServiceLevel(organizationId);
+  const timeZone = await getUserTimeZone(organizationId);
   const recentCycles = await prisma.scanCycleLog.findMany({
+    where: { organizationId },
     orderBy: { startedAt: "desc" },
     take: RECENT_CYCLES_LIMIT,
   });
   const tokensToday = await prisma.scanCycleLog.aggregate({
-    where: { startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+    where: { organizationId, startedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
     _sum: { totalTokens: true },
   });
 

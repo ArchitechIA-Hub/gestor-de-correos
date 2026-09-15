@@ -1,4 +1,3 @@
-import { CURRENT_USER_NAME } from "@/lib/config";
 import { formatLongDate } from "@/lib/format/date";
 import { DIGEST_STATUS_LABELS, suggestedDigestAction, type DigestData } from "./get-digest-data";
 
@@ -17,7 +16,7 @@ const CELL = "padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:13px;";
  * todo Outlook de escritorio, no lo soportan) con el mismo contenido que la
  * página `/digest` — ver `getDigestData`.
  */
-export function renderDigestEmailHtml(data: DigestData, timeZone: string): string {
+export function renderDigestEmailHtml(data: DigestData, timeZone: string, ownerName: string): string {
   const rows = data.emails
     .map((email) => {
       const commitment = email.commitments[0];
@@ -62,7 +61,7 @@ export function renderDigestEmailHtml(data: DigestData, timeZone: string): strin
 
   return `
 <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;max-width:720px;">
-  <h1 style="font-size:20px;margin:0 0 4px;">Informe de ${escapeHtml(CURRENT_USER_NAME)}</h1>
+  <h1 style="font-size:20px;margin:0 0 4px;">Informe de ${escapeHtml(ownerName)}</h1>
   <p style="color:#6b7280;font-size:13px;margin:0 0 16px;">
     ${formatLongDate(data.rangeStart, timeZone)} — ${formatLongDate(data.rangeEnd, timeZone)}
   </p>

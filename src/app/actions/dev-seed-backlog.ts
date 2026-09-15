@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { generateMockEmails } from "@/lib/mock/generate-emails";
 
 /**
@@ -15,6 +16,7 @@ export async function devSeedBacklog(count: number) {
     throw new Error("dev-seed-backlog no está disponible en producción.");
   }
 
+  const { organizationId } = await requireSession();
   const now = new Date();
   const generated = generateMockEmails(count, now);
   const uniquePrefix = `dev-${Date.now()}`;
@@ -26,9 +28,11 @@ export async function devSeedBacklog(count: number) {
     let senderId = senderCache.get(item.sender.email);
     if (!senderId) {
       const sender = await prisma.sender.upsert({
-        where: { email: item.sender.email },
+        // Sender.email es único compuesto con organizationId, no global.
+        where: { organizationId_email: { organizationId, email: item.sender.email } },
         update: {},
         create: {
+          organizationId,
           email: item.sender.email,
           name: item.sender.name,
           isVip: item.sender.isVip,
@@ -42,10 +46,18 @@ export async function devSeedBacklog(count: number) {
 
     let mailAccountId = accountCache.get(item.account.emailAddress);
     if (!mailAccountId) {
+      // MailAccount.emailAddress sigue siendo único global a propósito (ver
+      // decision_multitenant_organization_user) — si ya existe de OTRA
+      // organización, este upsert la dejaría intacta (el `update: {}` no
+      // toca organizationId), pero mailAccountId apuntaría a una cuenta
+      // ajena. Con datos sintéticos de dev esto no debería pasar en la
+      // práctica; se deja tal cual por ser una herramienta interna, no un
+      // punto de entrada de producción.
       const account = await prisma.mailAccount.upsert({
         where: { emailAddress: item.account.emailAddress },
         update: {},
         create: {
+          organizationId,
           emailAddress: item.account.emailAddress,
           label: item.account.label,
         },
@@ -56,6 +68,7 @@ export async function devSeedBacklog(count: number) {
 
     await prisma.email.create({
       data: {
+        organizationId,
         senderId,
         mailAccountId,
         threadId: `${uniquePrefix}-${item.threadId}`,

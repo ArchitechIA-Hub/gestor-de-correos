@@ -14,9 +14,13 @@ import { recordAuditEvent } from "@/lib/audit/record";
  * no generar ruido de auditoría por variaciones de score que no cambian nada
  * visible para el usuario.
  */
-export async function recomputeOpenCommitmentPriorities(now: Date = new Date()): Promise<{ updated: number }> {
+export async function recomputeOpenCommitmentPriorities(
+  organizationId: string,
+  now: Date = new Date()
+): Promise<{ updated: number }> {
   const emails = await prisma.email.findMany({
     where: {
+      organizationId,
       status: "CLASSIFIED",
       commitments: { some: { status: { in: ["PENDING", "OVERDUE"] } } },
     },
@@ -48,6 +52,7 @@ export async function recomputeOpenCommitmentPriorities(now: Date = new Date()):
 
     if (isUrgent !== email.isUrgent) {
       await recordAuditEvent({
+        organizationId,
         actionType: "CLASSIFY",
         entityType: "Email",
         entityId: email.id,

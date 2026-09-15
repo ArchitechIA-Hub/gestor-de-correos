@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CURRENT_USER_NAME } from "@/lib/config";
 import { cn } from "@/lib/utils";
+import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { getAppSettings, getUserTimeZone } from "@/lib/settings";
 import { formatLongDate } from "@/lib/format/date";
 import { SendDigestControl } from "@/components/digest/send-digest-control";
@@ -15,18 +16,23 @@ export default async function DigestPage({
 }: {
   searchParams: Promise<{ range?: string }>;
 }) {
+  const { organizationId } = await requireSession();
   const { range } = await searchParams;
   const isWeekly = range !== "daily";
 
-  const [{ rangeStart, rangeEnd, emails, activeCommitments, overdueCommitments, vipSendersUnanswered }, appSettings] =
-    await Promise.all([getDigestData(isWeekly ? "weekly" : "daily"), getAppSettings()]);
+  const [{ rangeStart, rangeEnd, emails, activeCommitments, overdueCommitments, vipSendersUnanswered }, appSettings, organization] =
+    await Promise.all([
+      getDigestData(organizationId, isWeekly ? "weekly" : "daily"),
+      getAppSettings(organizationId),
+      prisma.organization.findUniqueOrThrow({ where: { id: organizationId } }),
+    ]);
 
-  const tz = await getUserTimeZone();
+  const tz = await getUserTimeZone(organizationId);
 
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="font-heading text-2xl text-foreground">Informe de {CURRENT_USER_NAME}</h1>
+        <h1 className="font-heading text-2xl text-foreground">Informe de {organization.name}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {formatLongDate(rangeStart, tz)} — {formatLongDate(rangeEnd, tz)}
         </p>

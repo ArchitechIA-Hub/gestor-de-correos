@@ -5,11 +5,21 @@ vi.mock("@/lib/ai/extract-commitments", () => ({ extractCommitments: vi.fn() }))
 
 import { prisma } from "@/lib/db/prisma";
 import { extractCommitments } from "@/lib/ai/extract-commitments";
-import { scan } from "./scan";
+import { runScanCycle } from "@/lib/scan/run-cycle";
 import { SCAN_BATCH_SIZE } from "@/lib/scan/constants";
 
 const mockedExtractCommitments = vi.mocked(extractCommitments);
 const ZERO_USAGE = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+let organizationId: string;
+
+// `scan()` (el Server Action de src/app/actions/scan.ts) exige sesión real
+// vía requireSession() — estos tests ejercitan la lógica de negocio directo
+// contra `runScanCycle`, que es lo que tanto la UI como el scheduler llaman
+// por debajo.
+function scan(options: Parameters<typeof runScanCycle>[1] = {}) {
+  return runScanCycle(organizationId, options);
+}
 
 function isoHoursFromNow(hours: number): string {
   return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
@@ -33,10 +43,11 @@ async function seedUnclassifiedEmail(
 ) {
   const i = overrides.index ?? 0;
   const account = await prisma.mailAccount.create({
-    data: { emailAddress: `cuenta${i}@test.local`, label: `Cuenta de prueba ${i}` },
+    data: { organizationId, emailAddress: `cuenta${i}@test.local`, label: `Cuenta de prueba ${i}` },
   });
   const sender = await prisma.sender.create({
     data: {
+      organizationId,
       email: `remitente${i}@test.local`,
       name: `Remitente de Prueba ${i}`,
       isVip: overrides.isVip ?? false,
@@ -45,6 +56,7 @@ async function seedUnclassifiedEmail(
   });
   return prisma.email.create({
     data: {
+      organizationId,
       senderId: sender.id,
       mailAccountId: account.id,
       threadId: `thread-${i}`,
@@ -58,6 +70,8 @@ async function seedUnclassifiedEmail(
 
 beforeEach(async () => {
   await resetDb();
+  const organization = await prisma.organization.create({ data: { name: "Organización de prueba" } });
+  organizationId = organization.id;
   mockedExtractCommitments.mockReset();
 });
 
@@ -161,7 +175,7 @@ describe("scan", () => {
   });
 
   it("crea un evento de calendario solo cuando el extra calendarEnabled está activo", async () => {
-    await prisma.extraConfig.create({ data: { calendarEnabled: true } });
+    await prisma.extraConfig.create({ data: { organizationId, calendarEnabled: true } });
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
       extraction: {
@@ -193,7 +207,7 @@ describe("scan", () => {
   });
 
   it("envía la notificación de WhatsApp al compromiso más próximo solo cuando whatsappEnabled está activo y el correo queda urgente", async () => {
-    await prisma.extraConfig.create({ data: { whatsappEnabled: true } });
+    await prisma.extraConfig.create({ data: { organizationId, whatsappEnabled: true } });
     await seedUnclassifiedEmail();
     mockedExtractCommitments.mockResolvedValue({
       extraction: {

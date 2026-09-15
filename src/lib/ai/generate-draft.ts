@@ -1,5 +1,4 @@
 import { openai, OPENAI_MODEL } from "./client";
-import { CURRENT_USER_NAME } from "@/lib/config";
 import type { DraftResponseType } from "@/generated/prisma/enums";
 
 export type GenerateDraftInput = {
@@ -9,6 +8,8 @@ export type GenerateDraftInput = {
   commitmentDescriptions: string[];
   tone?: string;
   responseType: DraftResponseType;
+  /** Nombre de la organización (la persona/cuenta cuya bandeja se gestiona) — con quién firma el borrador, no quien lo generó dando clic. */
+  signerName: string;
 };
 
 const RESPONSE_TYPE_INSTRUCTIONS: Record<DraftResponseType, string> = {
@@ -41,7 +42,7 @@ export async function generateDraft(input: GenerateDraftInput): Promise<string> 
     instructions:
       "Eres un asistente que redacta borradores de respuesta de correo en español para un ejecutivo con poco tiempo. " +
       "El borrador es SOLO una propuesta que el usuario revisará y aprobará manualmente antes de enviarse — nunca se envía automáticamente. " +
-      `Firma como ${CURRENT_USER_NAME}. ` +
+      `Firma como ${input.signerName}. ` +
       "Responde ÚNICAMENTE con el cuerpo del correo en texto plano: sin encabezado de asunto, sin markdown (nada de **, #, -, etc.), sin placeholders entre corchetes. " +
       toneInstruction +
       " " +

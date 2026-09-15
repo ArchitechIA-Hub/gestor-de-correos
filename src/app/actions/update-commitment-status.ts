@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { recomputeEmailPriority } from "@/lib/priority/recompute-email";
 
@@ -13,7 +14,12 @@ import { recomputeEmailPriority } from "@/lib/priority/recompute-email";
  * quitaba la urgencia hasta el próximo movimiento de bandeja.
  */
 export async function updateCommitmentStatus(commitmentId: string, status: "COMPLETED" | "CANCELLED") {
-  const commitment = await prisma.commitment.findUniqueOrThrow({ where: { id: commitmentId } });
+  const { organizationId } = await requireSession();
+  // Commitment no lleva organizationId directo — ownership vía el email al
+  // que pertenece.
+  const commitment = await prisma.commitment.findFirstOrThrow({
+    where: { id: commitmentId, email: { organizationId } },
+  });
 
   const before = { status: commitment.status };
   const after = { status };
@@ -22,6 +28,7 @@ export async function updateCommitmentStatus(commitmentId: string, status: "COMP
   await recomputeEmailPriority(commitment.emailId);
 
   await recordAuditEvent({
+    organizationId,
     actionType: "UPDATE_COMMITMENT_STATUS",
     entityType: "Commitment",
     entityId: commitmentId,

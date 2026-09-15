@@ -26,15 +26,19 @@ export type ThreadItem =
  * aprobados), ordenados cronológicamente. Devuelve [] si el hilo tiene un solo
  * mensaje y ninguna respuesta (no hay nada que "conversar").
  */
-export async function getEmailThread(threadId: string, currentEmailId: string): Promise<ThreadItem[]> {
+export async function getEmailThread(
+  organizationId: string,
+  threadId: string,
+  currentEmailId: string
+): Promise<ThreadItem[]> {
   const [emails, sentDrafts] = await Promise.all([
     prisma.email.findMany({
-      where: { threadId },
+      where: { organizationId, threadId },
       select: { id: true, receivedAt: true, subject: true, summary: true, rawBody: true, sender: { select: { name: true } } },
       orderBy: { receivedAt: "asc" },
     }),
     prisma.draft.findMany({
-      where: { status: "APPROVED", email: { threadId } },
+      where: { status: "APPROVED", email: { organizationId, threadId } },
       select: { id: true, content: true, responseType: true, approvedAt: true, generatedAt: true },
       orderBy: { approvedAt: "asc" },
     }),

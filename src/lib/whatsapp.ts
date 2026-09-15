@@ -9,12 +9,17 @@ import { recordAuditEvent } from "@/lib/audit/record";
  * urgencia <48h, así que sí respeta el gating por extra (mismo criterio que
  * el calendario, ver decision-calendario-real en memoria).
  */
-export async function sendWhatsAppNotification(params: { commitmentId: string; message: string }) {
+export async function sendWhatsAppNotification(params: {
+  organizationId: string;
+  commitmentId: string;
+  message: string;
+}) {
   const notification = await prisma.whatsAppNotification.create({
     data: { commitmentId: params.commitmentId, message: params.message },
   });
 
   await recordAuditEvent({
+    organizationId: params.organizationId,
     actionType: "SEND_WHATSAPP_NOTIFICATION",
     entityType: "WhatsAppNotification",
     entityId: notification.id,
@@ -24,8 +29,11 @@ export async function sendWhatsAppNotification(params: { commitmentId: string; m
   return notification;
 }
 
-export async function getRecentWhatsAppNotifications(limit = 10) {
+// WhatsAppNotification no lleva organizationId directo — se filtra por el
+// join hasta Email, igual que CalendarEvent.
+export async function getRecentWhatsAppNotifications(organizationId: string, limit = 10) {
   return prisma.whatsAppNotification.findMany({
+    where: { commitment: { email: { organizationId } } },
     include: { commitment: { include: { email: { include: { sender: true } } } } },
     orderBy: { sentAt: "desc" },
     take: limit,

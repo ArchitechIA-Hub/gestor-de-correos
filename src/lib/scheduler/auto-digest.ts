@@ -1,17 +1,14 @@
-import { getUserTimeZone } from "@/lib/settings";
-import { getNextWeeklyOccurrence } from "./next-occurrence";
-
 declare global {
-  var __autoDigestTimer: ReturnType<typeof setTimeout> | undefined;
+  var __autoDigestTimer: ReturnType<typeof setInterval> | undefined;
 }
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
-const FALLBACK_RETRY_MINUTES = 30;
 
-// Jueves 7am, hora del usuario (getUserTimeZone) — decisión del usuario
-// 2026-09-12. Cambiar solo estos dos valores si se pide otro día/hora.
-const DIGEST_WEEKDAY = 4; // 0 = domingo ... 4 = jueves
-const DIGEST_HOUR = 7;
+// Tick fijo: la resolución que importa es "jueves 7am", no minuto a minuto,
+// así que un intervalo más largo que el de auto-scan.ts es suficiente. El
+// gate real ("¿ya le tocó esta semana a esta organización, en su propia zona
+// horaria?") vive dentro de /api/send-digest, por organización.
+const TICK_MINUTES = 20;
 
 function isAutoDigestEnabled(): boolean {
   // Reutiliza el mismo interruptor que el scheduler de escaneo — ambos son
@@ -19,16 +16,14 @@ function isAutoDigestEnabled(): boolean {
   return process.env.AUTO_SCAN_ENABLED !== "false";
 }
 
-async function scheduleNext() {
-  const timeZone = await getUserTimeZone();
-  const next = getNextWeeklyOccurrence(new Date(), timeZone, { weekday: DIGEST_WEEKDAY, hour: DIGEST_HOUR });
-  const delayMs = Math.max(1000, next.getTime() - Date.now());
+let tickInFlight = false;
 
-  globalThis.__autoDigestTimer = setTimeout(runCycle, delayMs);
-  console.log(`[auto-digest] próximo informe automático: ${next.toISOString()} (en ${Math.round(delayMs / 60000)} min)`);
-}
-
-async function runCycle() {
+async function runTick() {
+  if (tickInFlight) {
+    console.warn("[auto-digest] tick anterior todavía en curso, se salta este.");
+    return;
+  }
+  tickInFlight = true;
   try {
     const response = await fetch(`${APP_URL}/api/send-digest`, {
       method: "POST",
@@ -39,19 +34,30 @@ async function runCycle() {
       throw new Error(`El endpoint de informe respondió ${response.status}: ${body.error ?? "sin detalle"}`);
     }
     const result = await response.json();
-    console.log(`[auto-digest] informe semanal enviado a ${result.recipientEmail}`);
-    await scheduleNext();
+    const orgResults = (result.organizations ?? []) as Array<{
+      organizationId: string;
+      recipientEmail?: string;
+      error?: string;
+    }>;
+    for (const r of orgResults) {
+      if (r.error) {
+        console.error(`[auto-digest] org ${r.organizationId}: ${r.error}`);
+      } else {
+        console.log(`[auto-digest] org ${r.organizationId}: informe semanal enviado a ${r.recipientEmail}`);
+      }
+    }
   } catch (error) {
-    console.error(`[auto-digest] error enviando el informe, reintentando en ${FALLBACK_RETRY_MINUTES} min:`, error);
-    globalThis.__autoDigestTimer = setTimeout(runCycle, FALLBACK_RETRY_MINUTES * 60 * 1000);
+    console.error("[auto-digest] error en el tick:", error);
+  } finally {
+    tickInFlight = false;
   }
 }
 
 /**
- * Arranca el envío automático semanal del Informe (jueves 7am hora del
- * usuario). Igual que el scheduler de escaneo (src/lib/scheduler/auto-scan.ts),
- * requiere que el proceso del servidor siga vivo — no funciona en
- * serverless sin timers persistentes. Se puede desactivar con
+ * Arranca el tick periódico del envío automático del Informe (jueves 7am,
+ * hora de cada organización — gateado dentro de /api/send-digest). Igual que
+ * el scheduler de escaneo (src/lib/scheduler/auto-scan.ts), requiere que el
+ * proceso del servidor siga vivo. Se puede desactivar con
  * AUTO_SCAN_ENABLED=false.
  */
 export function startAutoDigestScheduler() {
@@ -62,5 +68,7 @@ export function startAutoDigestScheduler() {
     return;
   }
 
-  void scheduleNext();
+  console.log(`[auto-digest] iniciado — tick cada ${TICK_MINUTES} min, cadencia real gateada por organización`);
+  globalThis.__autoDigestTimer = setInterval(runTick, TICK_MINUTES * 60 * 1000);
+  void runTick();
 }

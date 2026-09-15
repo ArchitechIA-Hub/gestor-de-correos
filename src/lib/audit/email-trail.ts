@@ -6,9 +6,9 @@ import { prisma } from "@/lib/db/prisma";
  * borradores, alertas push, notificaciones de WhatsApp). Los `entityId` son
  * cuids únicos, así que basta con filtrar por id sin mirar el `entityType`.
  */
-export async function getEmailAuditTrail(emailId: string) {
-  const email = await prisma.email.findUnique({
-    where: { id: emailId },
+export async function getEmailAuditTrail(organizationId: string, emailId: string) {
+  const email = await prisma.email.findFirst({
+    where: { id: emailId, organizationId },
     select: {
       id: true,
       commitments: { select: { id: true, whatsAppNotifications: { select: { id: true } } } },
@@ -27,7 +27,7 @@ export async function getEmailAuditTrail(emailId: string) {
   ];
 
   return prisma.auditLogEntry.findMany({
-    where: { entityId: { in: ids } },
+    where: { organizationId, entityId: { in: ids } },
     orderBy: { createdAt: "asc" },
   });
 }

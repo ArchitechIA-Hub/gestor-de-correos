@@ -1,67 +1,67 @@
-import { getCurrentServiceLevel } from "@/lib/priority/current";
-import { recomputeOpenCommitmentPriorities } from "@/lib/priority/recompute";
-
 declare global {
-  var __autoScanTimer: ReturnType<typeof setTimeout> | undefined;
+  var __autoScanTimer: ReturnType<typeof setInterval> | undefined;
 }
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
-const FALLBACK_RETRY_MINUTES = 5;
-const FIRST_CYCLE_DELAY_MINUTES = 0.2; // ~12s de margen para que el servidor termine de levantar
+
+// Tick fijo y corto (no una frecuencia autocalculada): con varias
+// organizaciones, cada una puede necesitar una cadencia distinta según su
+// propio backlog (ver CLAUDE.md), así que el gate de "¿ya le toca?" vive por
+// organización dentro de /api/scan (comparado contra su ScanCycleLog más
+// reciente) — este tick solo decide cada cuánto se pregunta, nunca cada
+// cuánto se re-escanea de verdad. 1 minuto es barato (la propia query es
+// ligera) y deja margen sobrado para el nivel más exigente (cada 15 min).
+const TICK_MINUTES = 1;
 
 function isAutoScanEnabled(): boolean {
   return process.env.AUTO_SCAN_ENABLED !== "false";
 }
 
-function scheduleNext(minutes: number) {
-  globalThis.__autoScanTimer = setTimeout(runCycle, minutes * 60 * 1000);
-}
+// Evita que un tick se solape con el anterior si un ciclo (import + scan de
+// TODAS las organizaciones vencidas) tarda más que el intervalo del tick —
+// ver riesgo de "overlap de ciclos" en decision_multitenant_organization_user.
+let tickInFlight = false;
 
-async function runCycle() {
+async function runTick() {
+  if (tickInFlight) {
+    console.warn("[auto-scan] tick anterior todavía en curso, se salta este.");
+    return;
+  }
+  tickInFlight = true;
   try {
-    // Siempre se llama, aunque el backlog ya clasificado esté en 0: el paso
-    // de import (sin costo de IA) es el que trae correo nuevo, y solo se ve
-    // reflejado en el backlog DESPUÉS de correr — filtrar por backlog previo
-    // aquí dejaría el import sin correr nunca en el caso normal de "ya estoy
-    // al día".
     const response = await fetch(`${APP_URL}/api/scan`, {
       method: "POST",
       headers: process.env.INTERNAL_SCAN_SECRET ? { "x-scan-secret": process.env.INTERNAL_SCAN_SECRET } : {},
     });
     if (!response.ok) throw new Error(`El endpoint de escaneo respondió ${response.status}`);
     const result = await response.json();
-    console.log(
-      `[auto-scan] importados ${result.imported} · escaneados ${result.scanned} · ${result.commitmentsDetected} compromisos · ${result.urgentDetected} urgentes · ${result.marketingDetected} marketing · ${result.totalTokens} tokens`
-    );
-
-    try {
-      const { updated } = await recomputeOpenCommitmentPriorities();
-      if (updated > 0) console.log(`[auto-scan] recalculados ${updated} correos con compromisos abiertos`);
-    } catch (error) {
-      // No debe tumbar el ciclo de escaneo de backlog si esto falla.
-      console.error("[auto-scan] error recalculando prioridades por paso del tiempo:", error);
+    const orgResults = (result.organizations ?? []) as Array<{
+      organizationId: string;
+      imported: number;
+      scanned: number;
+      commitmentsDetected: number;
+      urgentDetected: number;
+      marketingDetected: number;
+      totalTokens: number;
+    }>;
+    for (const r of orgResults) {
+      console.log(
+        `[auto-scan] org ${r.organizationId}: importados ${r.imported} · escaneados ${r.scanned} · ${r.commitmentsDetected} compromisos · ${r.urgentDetected} urgentes · ${r.marketingDetected} marketing · ${r.totalTokens} tokens`
+      );
     }
-
-    const { scanFrequencyMinutes } = await getCurrentServiceLevel();
-    scheduleNext(scanFrequencyMinutes);
   } catch (error) {
-    console.error(`[auto-scan] error en el ciclo, reintentando en ${FALLBACK_RETRY_MINUTES} min:`, error);
-    scheduleNext(FALLBACK_RETRY_MINUTES);
+    console.error("[auto-scan] error en el tick:", error);
+  } finally {
+    tickInFlight = false;
   }
 }
 
 /**
- * Arranca el escaneo periódico automático respetando la frecuencia del nivel
- * de servicio activo (CLAUDE.md: cada nivel define su propia cadencia de
- * escaneo). Se reprograma después de cada ciclo con la frecuencia recién
- * calculada, porque el backlog —y por tanto el nivel— puede cambiar entre
- * ciclos. Requiere que el proceso del servidor (`next dev` / `next start`)
- * siga vivo; no funciona en un entorno serverless sin timers persistentes.
- *
- * IMPORTANTE: cada ciclo llama a /api/scan (import de Gmail + clasificación).
- * El import no tiene costo de IA; la clasificación solo llama a la IA sobre
- * los correos que de verdad quedaron sin clasificar (0 costo si no hay
- * ninguno). Se puede desactivar todo el ciclo con AUTO_SCAN_ENABLED=false.
+ * Arranca el tick periódico automático (import + escaneo, gateado por
+ * organización dentro de /api/scan — ver runTick). Requiere que el proceso
+ * del servidor (`next dev` / `next start`) siga vivo; no funciona en un
+ * entorno serverless sin timers persistentes. Se puede desactivar con
+ * AUTO_SCAN_ENABLED=false.
  */
 export function startAutoScanScheduler() {
   if (globalThis.__autoScanTimer) return; // ya arrancado (hot reload en dev)
@@ -71,6 +71,7 @@ export function startAutoScanScheduler() {
     return;
   }
 
-  console.log("[auto-scan] iniciado — respeta la frecuencia del nivel de servicio activo");
-  scheduleNext(FIRST_CYCLE_DELAY_MINUTES);
+  console.log(`[auto-scan] iniciado — tick cada ${TICK_MINUTES} min, cadencia real gateada por organización`);
+  globalThis.__autoScanTimer = setInterval(runTick, TICK_MINUTES * 60 * 1000);
+  void runTick(); // primer ciclo inmediato, sin esperar el primer intervalo
 }

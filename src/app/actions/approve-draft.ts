@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/audit/record";
 import { sendGmailReply, type OutgoingAttachment } from "@/lib/gmail/send";
 import { getNearestOpenCommitment } from "@/lib/priority/nearest-commitment";
@@ -21,8 +22,13 @@ import { recomputeEmailPriority } from "@/lib/priority/recompute-email";
  * usuario adjuntó en el diálogo de confirmación antes de enviar.
  */
 export async function approveDraft(draftId: string, attachments: OutgoingAttachment[] = []) {
-  const draft = await prisma.draft.findUniqueOrThrow({
-    where: { id: draftId },
+  const { organizationId } = await requireSession();
+  // Draft no lleva organizationId directo — el ownership se valida vía el
+  // email al que pertenece, que sí lo lleva. Un draftId de otra organización
+  // se trata igual que uno inexistente (findFirstOrThrow lanza igual que
+  // findUniqueOrThrow, pero permite combinar el id con este filtro).
+  const draft = await prisma.draft.findFirstOrThrow({
+    where: { id: draftId, email: { organizationId } },
     include: { email: { include: { mailAccount: true, sender: true } } },
   });
   const respondedAt = new Date();
@@ -57,6 +63,7 @@ export async function approveDraft(draftId: string, attachments: OutgoingAttachm
   ]);
 
   await recordAuditEvent({
+    organizationId,
     actionType: sentMessageId ? "SEND_DRAFT" : "APPROVE_DRAFT",
     entityType: "Draft",
     entityId: draftId,
@@ -83,6 +90,7 @@ export async function approveDraft(draftId: string, attachments: OutgoingAttachm
     await prisma.commitment.update({ where: { id: nearest.id }, data: { status: "COMPLETED" } });
     await recomputeEmailPriority(draft.emailId, respondedAt);
     await recordAuditEvent({
+      organizationId,
       actionType: "UPDATE_COMMITMENT_STATUS",
       entityType: "Commitment",
       entityId: nearest.id,
@@ -100,7 +108,8 @@ export async function approveDraft(draftId: string, attachments: OutgoingAttachm
 }
 
 export async function discardDraft(draftId: string) {
-  const draft = await prisma.draft.findUniqueOrThrow({ where: { id: draftId } });
+  const { organizationId } = await requireSession();
+  const draft = await prisma.draft.findFirstOrThrow({ where: { id: draftId, email: { organizationId } } });
 
   const updated = await prisma.draft.update({
     where: { id: draftId },
@@ -108,6 +117,7 @@ export async function discardDraft(draftId: string) {
   });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "APPROVE_DRAFT",
     entityType: "Draft",
     entityId: draftId,

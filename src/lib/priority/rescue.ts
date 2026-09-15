@@ -6,9 +6,9 @@ import { RESCUE_MODE_COMMITMENT_COUNT } from "./constants";
  * Ordena por el mismo priorityScore que ya combina urgencia + VIP en el motor
  * de priorización (src/lib/priority/engine.ts) — no reimplementa ese cálculo.
  */
-export async function getRescuePlan() {
+export async function getRescuePlan(organizationId: string) {
   return prisma.commitment.findMany({
-    where: { status: { in: ["PENDING", "OVERDUE"] } },
+    where: { status: { in: ["PENDING", "OVERDUE"] }, email: { organizationId } },
     include: { email: { include: { sender: true, mailAccount: true } } },
     orderBy: [{ email: { priorityScore: "desc" } }, { dueAt: "asc" }],
     take: RESCUE_MODE_COMMITMENT_COUNT,

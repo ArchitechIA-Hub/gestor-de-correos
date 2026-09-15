@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 
 /**
  * Marcar una alerta como leída es una interacción de lectura del usuario, no
@@ -9,8 +10,12 @@ import { prisma } from "@/lib/db/prisma";
  * que abrir un correo no se audita).
  */
 export async function markAlertRead(alertId: string) {
-  await prisma.urgentAlert.update({
-    where: { id: alertId },
+  const { organizationId } = await requireSession();
+  // updateMany (no update) para poder combinar el id con el filtro de
+  // organización sin lanzar si no hay match — un alertId de otra
+  // organización simplemente no actualiza nada.
+  await prisma.urgentAlert.updateMany({
+    where: { id: alertId, organizationId },
     data: { readAt: new Date() },
   });
 
@@ -18,8 +23,9 @@ export async function markAlertRead(alertId: string) {
 }
 
 export async function markAllAlertsRead() {
+  const { organizationId } = await requireSession();
   await prisma.urgentAlert.updateMany({
-    where: { readAt: null },
+    where: { organizationId, readAt: null },
     data: { readAt: new Date() },
   });
 

@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ requireSession: vi.fn() }));
 
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { moveToFinanzas, removeFromFinanzas, moveEmailsTo } from "./email-category";
+
+const mockedRequireSession = vi.mocked(requireSession);
+let organizationId: string;
 
 async function resetDb() {
   await prisma.whatsAppNotification.deleteMany();
@@ -20,16 +25,17 @@ async function resetDb() {
 
 async function seed(count = 1) {
   const account = await prisma.mailAccount.create({
-    data: { emailAddress: "bbva@test.local", label: "Banco" },
+    data: { organizationId, emailAddress: "bbva@test.local", label: "Banco" },
   });
   const sender = await prisma.sender.create({
-    data: { email: "notificaciones@bbva.test", name: "BBVA" },
+    data: { organizationId, email: "notificaciones@bbva.test", name: "BBVA" },
   });
   const emails = [];
   for (let i = 0; i < count; i++) {
     emails.push(
       await prisma.email.create({
         data: {
+          organizationId,
           senderId: sender.id,
           mailAccountId: account.id,
           threadId: `t${i}`,
@@ -46,6 +52,9 @@ async function seed(count = 1) {
 
 beforeEach(async () => {
   await resetDb();
+  const organization = await prisma.organization.create({ data: { name: "Organización de prueba" } });
+  organizationId = organization.id;
+  mockedRequireSession.mockResolvedValue({ userId: "test-user-id", organizationId });
 });
 
 describe("moveToFinanzas", () => {

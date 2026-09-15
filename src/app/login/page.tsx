@@ -15,10 +15,25 @@ export default async function LoginPage({
       >
         <div>
           <h1 className="font-heading text-xl text-foreground">Bandeja Ejecutiva</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Demo privada — introduce la contraseña de acceso.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Inicia sesión con tu cuenta.</p>
         </div>
 
         <input type="hidden" name="from" value={from ?? "/inbox"} />
+
+        <div className="flex flex-col gap-1">
+          <label htmlFor="email" className="text-xs text-muted-foreground">
+            Correo
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            autoFocus
+            required
+            className="h-9 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+        </div>
 
         <div className="flex flex-col gap-1">
           <label htmlFor="password" className="text-xs text-muted-foreground">
@@ -28,13 +43,13 @@ export default async function LoginPage({
             id="password"
             name="password"
             type="password"
-            autoFocus
+            autoComplete="current-password"
             required
             className="h-9 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </div>
 
-        {error && <p className="text-xs text-urgent">Contraseña incorrecta. Intenta de nuevo.</p>}
+        {error && <p className="text-xs text-urgent">Correo o contraseña incorrectos. Intenta de nuevo.</p>}
 
         <button
           type="submit"

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RevertButton } from "@/components/audit/revert-button";
+import { requireSession } from "@/lib/auth/session";
 import { getUserTimeZone } from "@/lib/settings";
 import { AUDIT_ACTION_LABELS as ACTION_LABELS } from "@/lib/audit/labels";
 import { formatShortDateTime } from "@/lib/format/date";
@@ -9,12 +10,14 @@ import { formatShortDateTime } from "@/lib/format/date";
 export const dynamic = "force-dynamic";
 
 export default async function AuditPage() {
+  const { organizationId } = await requireSession();
   const [entries, tz] = await Promise.all([
     prisma.auditLogEntry.findMany({
+      where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
-    getUserTimeZone(),
+    getUserTimeZone(organizationId),
   ]);
 
   return (

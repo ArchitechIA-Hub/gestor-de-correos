@@ -5,6 +5,7 @@ import { InboxTable, type InboxRow } from "@/components/inbox/inbox-table";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getActiveMailAccounts } from "@/lib/mail-accounts";
 import { getUserTimeZone } from "@/lib/settings";
+import { requireSession } from "@/lib/auth/session";
 import { EMAIL_CATEGORY_FINANZAS } from "@/lib/scan/constants";
 import { INBOX_PAGE_SIZE } from "@/lib/inbox/constants";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{ account?: string; view?: string; read?: string; page?: string }>;
 }) {
+  const { organizationId } = await requireSession();
   const { account: accountId, view, read, page: pageParam } = await searchParams;
   const isMarketingView = view === "marketing";
   const isFinanzasView = view === "finanzas";
@@ -33,9 +35,9 @@ export default async function InboxPage({
   const skip = (page - 1) * INBOX_PAGE_SIZE;
 
   const [{ backlogCount }, accounts, tz] = await Promise.all([
-    getCurrentServiceLevel(),
-    getActiveMailAccounts(),
-    getUserTimeZone(),
+    getCurrentServiceLevel(organizationId),
+    getActiveMailAccounts(organizationId),
+    getUserTimeZone(organizationId),
   ]);
 
   const accountFilter = accountId ? { mailAccountId: accountId } : {};
@@ -55,8 +57,9 @@ export default async function InboxPage({
     ? { category: EMAIL_CATEGORY_FINANZAS }
     : { OR: [{ category: null }, { category: EMAIL_CATEGORY_FINANZAS, isUrgent: true }] };
 
-  const marketingWhere = { status: "ARCHIVED" as const, isMarketing: true, ...accountFilter };
+  const marketingWhere = { organizationId, status: "ARCHIVED" as const, isMarketing: true, ...accountFilter };
   const classifiedWhere = {
+    organizationId,
     status: "CLASSIFIED" as const,
     isMarketing: false,
     ...categoryFilter,

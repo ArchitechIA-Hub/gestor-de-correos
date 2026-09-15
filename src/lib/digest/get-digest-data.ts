@@ -28,12 +28,12 @@ export function suggestedDigestAction(params: {
  * para que nunca diverjan entre lo que se ve en la app y lo que llega al
  * correo.
  */
-export async function getDigestData(range: DigestRange) {
+export async function getDigestData(organizationId: string, range: DigestRange) {
   const rangeStart = new Date(Date.now() - (range === "weekly" ? 7 : 1) * 24 * 60 * 60 * 1000);
   const rangeEnd = new Date();
 
   const emails = await prisma.email.findMany({
-    where: { receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false, category: null },
+    where: { organizationId, receivedAt: { gte: rangeStart, lte: rangeEnd }, isMarketing: false, category: null },
     include: {
       sender: true,
       commitments: { orderBy: { dueAt: "asc" }, take: 1 },
@@ -43,16 +43,17 @@ export async function getDigestData(range: DigestRange) {
   });
 
   const [activeCommitments, overdueCommitments, vipSendersUnanswered] = await Promise.all([
-    prisma.commitment.count({ where: { status: "PENDING" } }),
-    prisma.commitment.count({ where: { status: "OVERDUE" } }),
+    prisma.commitment.count({ where: { status: "PENDING", email: { organizationId } } }),
+    prisma.commitment.count({ where: { status: "OVERDUE", email: { organizationId } } }),
     prisma.sender.findMany({
       where: {
+        organizationId,
         isVip: true,
-        emails: { some: { drafts: { none: { status: "APPROVED" } } } },
+        emails: { some: { organizationId, drafts: { none: { status: "APPROVED" } } } },
       },
       include: {
         emails: {
-          where: { drafts: { none: { status: "APPROVED" } } },
+          where: { organizationId, drafts: { none: { status: "APPROVED" } } },
           orderBy: { receivedAt: "desc" },
           take: 1,
         },

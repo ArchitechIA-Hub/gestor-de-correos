@@ -1,8 +1,10 @@
 import { getCurrentServiceLevel } from "@/lib/priority/current";
+import { requireSession } from "@/lib/auth/session";
 import Link from "next/link";
 
 export async function ServiceLevelBadge() {
-  const { level, name, backlogCount } = await getCurrentServiceLevel();
+  const { organizationId } = await requireSession();
+  const { level, name, backlogCount } = await getCurrentServiceLevel(organizationId);
 
   return (
     <Link

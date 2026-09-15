@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ requireSession: vi.fn() }));
 
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { renameMailAccount } from "./mail-accounts";
+
+const mockedRequireSession = vi.mocked(requireSession);
+let organizationId: string;
 
 async function resetDb() {
   await prisma.whatsAppNotification.deleteMany();
@@ -20,12 +25,15 @@ async function resetDb() {
 
 async function seedAccount(label = "Cuenta vieja") {
   return prisma.mailAccount.create({
-    data: { emailAddress: "cuenta@test.local", label },
+    data: { organizationId, emailAddress: "cuenta@test.local", label },
   });
 }
 
 beforeEach(async () => {
   await resetDb();
+  const organization = await prisma.organization.create({ data: { name: "Organización de prueba" } });
+  organizationId = organization.id;
+  mockedRequireSession.mockResolvedValue({ userId: "test-user-id", organizationId });
 });
 
 describe("renameMailAccount", () => {

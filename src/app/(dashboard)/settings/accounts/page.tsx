@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MailAccountForm } from "@/components/settings/mail-account-form";
@@ -14,6 +15,8 @@ const GMAIL_ERROR_MESSAGES: Record<string, string> = {
   sin_refresh_token: "Google no entregó un refresh token — vuelve a intentar (a veces requiere revocar el acceso previo en myaccount.google.com/permissions).",
   sin_perfil: "No se pudo leer el perfil de Gmail tras conectar.",
   access_denied: "Cancelaste el consentimiento en Google.",
+  state_invalido: "El enlace de conexión expiró o no es válido — vuelve a hacer clic en \"Conectar con Google\".",
+  cuenta_ya_conectada: "Esa cuenta de Gmail ya está conectada a otra organización.",
 };
 
 export default async function MailAccountsSettingsPage({
@@ -21,8 +24,10 @@ export default async function MailAccountsSettingsPage({
 }: {
   searchParams: Promise<{ gmail_connected?: string; gmail_error?: string }>;
 }) {
+  const { organizationId } = await requireSession();
   const { gmail_connected, gmail_error } = await searchParams;
   const accounts = await prisma.mailAccount.findMany({
+    where: { organizationId },
     orderBy: { label: "asc" },
     include: { _count: { select: { emails: true } } },
   });

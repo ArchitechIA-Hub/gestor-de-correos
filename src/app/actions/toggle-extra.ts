@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { getExtraConfig, type ExtraFlagKey } from "@/lib/extras";
 import { recordAuditEvent } from "@/lib/audit/record";
 
 export async function toggleExtra(key: ExtraFlagKey, enabled: boolean) {
-  const config = await getExtraConfig();
+  const { organizationId } = await requireSession();
+  const config = await getExtraConfig(organizationId);
   const before = { [key]: config[key] };
 
   const updated = await prisma.extraConfig.update({
@@ -15,6 +17,7 @@ export async function toggleExtra(key: ExtraFlagKey, enabled: boolean) {
   });
 
   await recordAuditEvent({
+    organizationId,
     actionType: "TOGGLE_EXTRA",
     entityType: "ExtraConfig",
     entityId: updated.id,

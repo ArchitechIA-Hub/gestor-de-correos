@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requireSession } from "@/lib/auth/session";
 import { getExtraConfig, countActiveExtras, shouldConsolidatePanel } from "@/lib/extras";
 import { ExtraToggle } from "@/components/settings/extra-toggle";
 
@@ -33,7 +34,8 @@ const EXTRAS = [
 ];
 
 export default async function ExtrasSettingsPage() {
-  const config = await getExtraConfig();
+  const { organizationId } = await requireSession();
+  const config = await getExtraConfig(organizationId);
   const activeCount = countActiveExtras(config);
   const consolidated = shouldConsolidatePanel(config);
 

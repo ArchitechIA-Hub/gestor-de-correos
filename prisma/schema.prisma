@@ -10,31 +10,89 @@ datasource db {
   provider = "sqlite"
 }
 
+/**
+ * Tenant. Cada cliente vendido es una Organization; sus usuarios (login
+ * individual) y todo su dato de negocio (correos, config, auditoría) quedan
+ * aislados por organizationId — nunca por userId, para poder soportar tanto
+ * clientes independientes como varias personas de la misma empresa
+ * compartiendo los mismos datos (ver decision_multitenant_organization_user
+ * en memoria).
+ */
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  users           User[]
+  mailAccounts    MailAccount[]
+  senders         Sender[]
+  emails          Email[]
+  appSettings     AppSettings?
+  extraConfig     ExtraConfig?
+  auditLogEntries AuditLogEntry[]
+  scanCycleLogs   ScanCycleLog[]
+  urgentAlerts    UrgentAlert[]
+}
+
+/**
+ * Persona con login individual (email + password). Pertenece a una única
+ * Organization — la atribución de auditoría es por persona, pero el dato de
+ * negocio se filtra por organizationId, no por userId.
+ */
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String       @unique
+  passwordHash   String
+  name           String
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
 model MailAccount {
-  id                 String   @id @default(cuid())
-  emailAddress       String   @unique
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  // Único GLOBAL a propósito (no compuesto con organizationId): impide que la
+  // misma cuenta Gmail real quede conectada a dos organizaciones a la vez.
+  emailAddress       String       @unique
   label              String
-  provider           String   @default("mock")
-  isActive           Boolean  @default(true)
+  provider           String       @default("mock")
+  isActive           Boolean      @default(true)
   googleRefreshToken String?
-  createdAt          DateTime @default(now())
+  createdAt          DateTime     @default(now())
 
   emails Email[]
+
+  @@index([organizationId])
 }
 
 model Sender {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  name         String
-  isVip        Boolean  @default(false)
-  vipReason    String?
-  organization String?
+  id             String       @id @default(cuid())
+  organizationId String
+  // Relación al tenant llamada "org" (no "organization") porque ese nombre ya
+  // lo usa el campo de texto libre de abajo (la empresa del remitente externo,
+  // sin relación con el modelo Organization/tenant).
+  org            Organization @relation(fields: [organizationId], references: [id])
+  email          String
+  name           String
+  isVip          Boolean      @default(false)
+  vipReason      String?
+  organization   String?
   // Regla fija de categoría para este remitente (p. ej. "FINANZAS"): si está
   // puesta, scan() la aplica sin depender de la IA. null = sin regla.
-  autoCategory String?
-  createdAt    DateTime @default(now())
+  autoCategory   String?
+  createdAt      DateTime     @default(now())
 
   emails Email[]
+
+  // Compuesto (no global): el mismo remitente externo puede escribirle a dos
+  // organizaciones distintas sin chocar.
+  @@unique([organizationId, email])
 }
 
 enum EmailStatus {
@@ -44,20 +102,24 @@ enum EmailStatus {
 }
 
 model Email {
-  id              String      @id @default(cuid())
+  id              String       @id @default(cuid())
+  // Denormalizado directo (no solo vía mailAccount) porque Email se consulta
+  // standalone en casi todo el sistema (scan, prioridad, digest, alertas).
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
   senderId        String
-  sender          Sender      @relation(fields: [senderId], references: [id])
+  sender          Sender       @relation(fields: [senderId], references: [id])
   mailAccountId   String
-  mailAccount     MailAccount @relation(fields: [mailAccountId], references: [id])
+  mailAccount     MailAccount  @relation(fields: [mailAccountId], references: [id])
   threadId        String
   subject         String
   rawBody         String
   summary         String?
   receivedAt      DateTime
-  status          EmailStatus @default(UNCLASSIFIED)
-  priorityScore   Float       @default(0)
-  isUrgent        Boolean     @default(false)
-  isMarketing     Boolean     @default(false)
+  status          EmailStatus  @default(UNCLASSIFIED)
+  priorityScore   Float        @default(0)
+  isUrgent        Boolean      @default(false)
+  isMarketing     Boolean      @default(false)
   marketingReason String?
   // Categoría temática ortogonal al status. Único valor por ahora: "FINANZAS"
   // (correos de bancos / pagos, que viven en su propia vista). null = bandeja normal.
@@ -65,18 +127,19 @@ model Email {
   classifiedAt    DateTime?
   readAt          DateTime?
   respondedAt     DateTime?
-  gmailMessageId  String?     @unique
+  gmailMessageId  String?      @unique
   rfcMessageId    String?
-  createdAt       DateTime    @default(now())
+  createdAt       DateTime     @default(now())
 
-  commitments Commitment[]
-  drafts      Draft[]
+  commitments  Commitment[]
+  drafts       Draft[]
   urgentAlerts UrgentAlert[]
-  attachments EmailAttachment[]
+  attachments  EmailAttachment[]
 
   @@index([status])
   @@index([threadId])
   @@index([mailAccountId])
+  @@index([organizationId])
 }
 
 model EmailAttachment {
@@ -106,20 +169,20 @@ enum CommitmentConfidence {
 }
 
 model Commitment {
-  id             String                @id @default(cuid())
-  emailId        String
-  email          Email                 @relation(fields: [emailId], references: [id])
-  description    String
-  dueAt          DateTime?
-  confidence     CommitmentConfidence  @default(MEDIUM)
-  sourceExcerpt  String
-  status         CommitmentStatus      @default(PENDING)
-  detectedByAI   Boolean               @default(true)
-  createdAt      DateTime              @default(now())
+  id            String               @id @default(cuid())
+  emailId       String
+  email         Email                @relation(fields: [emailId], references: [id])
+  description   String
+  dueAt         DateTime?
+  confidence    CommitmentConfidence @default(MEDIUM)
+  sourceExcerpt String
+  status        CommitmentStatus     @default(PENDING)
+  detectedByAI  Boolean              @default(true)
+  createdAt     DateTime             @default(now())
 
-  calendarEvent  CalendarEvent?
+  calendarEvent         CalendarEvent?
   whatsAppNotifications WhatsAppNotification[]
-  urgentAlerts   UrgentAlert[]
+  urgentAlerts          UrgentAlert[]
 
   @@index([dueAt])
   @@index([status])
@@ -177,29 +240,37 @@ enum AuditPerformer {
 }
 
 model AuditLogEntry {
-  id            String          @id @default(cuid())
-  actionType    AuditActionType
-  entityType    String
-  entityId      String
-  payloadBefore String?
-  payloadAfter  String?
-  performedBy   AuditPerformer  @default(SYSTEM)
-  reversible    Boolean         @default(true)
-  revertedAt    DateTime?
-  createdAt     DateTime        @default(now())
+  id             String          @id @default(cuid())
+  // Directo porque /audit y revertAuditEvent consultan esta tabla standalone
+  // (entityId es un string libre sin FK real, así que no hay join posible).
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  actionType     AuditActionType
+  entityType     String
+  entityId       String
+  payloadBefore  String?
+  payloadAfter   String?
+  performedBy    AuditPerformer  @default(SYSTEM)
+  reversible     Boolean         @default(true)
+  revertedAt     DateTime?
+  createdAt      DateTime        @default(now())
 
   @@index([entityType, entityId])
   @@index([createdAt])
+  @@index([organizationId])
 }
 
 model ExtraConfig {
-  id                   String  @id @default(cuid())
-  calendarEnabled      Boolean @default(false)
-  whatsappEnabled      Boolean @default(false)
-  autoDraftToneEnabled Boolean @default(false)
-  vipSlaEnabled        Boolean @default(false)
-  analyticsEnabled     Boolean @default(false)
-  updatedAt            DateTime @updatedAt
+  id                   String       @id @default(cuid())
+  // Una fila por organización (antes era fila única global).
+  organizationId       String       @unique
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  calendarEnabled      Boolean      @default(false)
+  whatsappEnabled      Boolean      @default(false)
+  autoDraftToneEnabled Boolean      @default(false)
+  vipSlaEnabled        Boolean      @default(false)
+  analyticsEnabled     Boolean      @default(false)
+  updatedAt            DateTime     @updatedAt
 }
 
 model CalendarEvent {
@@ -229,49 +300,53 @@ model WhatsAppNotification {
  * Nivel 1").
  */
 model UrgentAlert {
-  id           String      @id @default(cuid())
-  emailId      String
-  email        Email       @relation(fields: [emailId], references: [id])
-  commitmentId String?
-  commitment   Commitment? @relation(fields: [commitmentId], references: [id])
-  message      String
-  dueAt        DateTime?
-  createdAt    DateTime    @default(now())
-  readAt       DateTime?
+  id             String       @id @default(cuid())
+  // Directo porque se consulta standalone en src/lib/alerts.ts.
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  emailId        String
+  email          Email        @relation(fields: [emailId], references: [id])
+  commitmentId   String?
+  commitment     Commitment?  @relation(fields: [commitmentId], references: [id])
+  message        String
+  dueAt          DateTime?
+  createdAt      DateTime     @default(now())
+  readAt         DateTime?
 
   @@index([readAt])
   @@index([emailId])
+  @@index([organizationId])
 }
 
 model AppSettings {
-  id                  String   @id @default(cuid())
+  id                   String       @id @default(cuid())
+  // Una fila por organización (antes era fila única global).
+  organizationId       String       @unique
+  organization         Organization @relation(fields: [organizationId], references: [id])
   digestRecipientEmail String?
-  timeZone            String   @default("America/Bogota")
-  updatedAt           DateTime @updatedAt
-}
-
-model ServiceLevelHistory {
-  id             String   @id @default(cuid())
-  level          Int
-  backlogCount   Int
-  recordedAt     DateTime @default(now())
+  timeZone             String       @default("America/Bogota")
+  updatedAt            DateTime     @updatedAt
 }
 
 /**
  * Una fila por cada ciclo del scheduler automático (import + scan), para
  * poder ver el gasto real de tokens en vez de solo el tope teórico — ver
- * discusión de costo en la sesión que agregó el import automático.
+ * discusión de costo en la sesión que agregó el import automático. Desde el
+ * scheduler multi-tenant, una fila por ciclo POR ORGANIZACIÓN.
  */
 model ScanCycleLog {
-  id             String   @id @default(cuid())
-  startedAt      DateTime @default(now())
-  emailsImported Int      @default(0)
-  emailsScanned  Int      @default(0)
-  inputTokens    Int      @default(0)
-  outputTokens   Int      @default(0)
-  totalTokens    Int      @default(0)
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  startedAt      DateTime     @default(now())
+  emailsImported Int          @default(0)
+  emailsScanned  Int          @default(0)
+  inputTokens    Int          @default(0)
+  outputTokens   Int          @default(0)
+  totalTokens    Int          @default(0)
   serviceLevel   Int
   backlogCount   Int
 
   @@index([startedAt])
+  @@index([organizationId])
 }

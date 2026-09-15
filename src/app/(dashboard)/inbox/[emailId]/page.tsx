@@ -17,6 +17,7 @@ import { getExtraConfig } from "@/lib/extras";
 import { computeVipSlaStatus } from "@/lib/priority/sla";
 import { buildGoogleCalendarUrl } from "@/lib/calendar/links";
 import { getUserTimeZone } from "@/lib/settings";
+import { requireSession } from "@/lib/auth/session";
 import { getEmailAuditTrail } from "@/lib/audit/email-trail";
 import { getEmailThread } from "@/lib/inbox/thread";
 import { AUDIT_ACTION_LABELS } from "@/lib/audit/labels";
@@ -41,11 +42,12 @@ export default async function EmailThreadPage({
 }: {
   params: Promise<{ emailId: string }>;
 }) {
+  const { organizationId } = await requireSession();
   const { emailId } = await params;
 
   const [email, { features }, extraConfig, tz, trail] = await Promise.all([
-    prisma.email.findUnique({
-      where: { id: emailId },
+    prisma.email.findFirst({
+      where: { id: emailId, organizationId },
       include: {
         sender: true,
         mailAccount: true,
@@ -54,15 +56,15 @@ export default async function EmailThreadPage({
         attachments: true,
       },
     }),
-    getCurrentServiceLevel(),
-    getExtraConfig(),
-    getUserTimeZone(),
-    getEmailAuditTrail(emailId),
+    getCurrentServiceLevel(organizationId),
+    getExtraConfig(organizationId),
+    getUserTimeZone(organizationId),
+    getEmailAuditTrail(organizationId, emailId),
   ]);
 
   if (!email) notFound();
 
-  const thread = await getEmailThread(email.threadId, email.id);
+  const thread = await getEmailThread(organizationId, email.threadId, email.id);
 
   const vipSlaStatus = extraConfig.vipSlaEnabled
     ? computeVipSlaStatus({

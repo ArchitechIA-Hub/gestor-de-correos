@@ -9,6 +9,7 @@ import { recordAuditEvent } from "@/lib/audit/record";
  * el nivel de servicio calculado (incluso en Nivel 1)".
  */
 export async function createUrgentAlert(params: {
+  organizationId: string;
   emailId: string;
   subject: string;
   senderName: string;
@@ -17,6 +18,7 @@ export async function createUrgentAlert(params: {
 }) {
   const alert = await prisma.urgentAlert.create({
     data: {
+      organizationId: params.organizationId,
       emailId: params.emailId,
       commitmentId: params.commitmentId,
       dueAt: params.dueAt,
@@ -25,6 +27,7 @@ export async function createUrgentAlert(params: {
   });
 
   await recordAuditEvent({
+    organizationId: params.organizationId,
     actionType: "CREATE_URGENT_ALERT",
     entityType: "UrgentAlert",
     entityId: alert.id,
@@ -34,15 +37,15 @@ export async function createUrgentAlert(params: {
   return alert;
 }
 
-export async function getUnreadUrgentAlerts(limit = 20) {
+export async function getUnreadUrgentAlerts(organizationId: string, limit = 20) {
   return prisma.urgentAlert.findMany({
-    where: { readAt: null },
+    where: { organizationId, readAt: null },
     include: { email: { include: { sender: true } } },
     orderBy: { createdAt: "desc" },
     take: limit,
   });
 }
 
-export async function countUnreadUrgentAlerts() {
-  return prisma.urgentAlert.count({ where: { readAt: null } });
+export async function countUnreadUrgentAlerts(organizationId: string) {
+  return prisma.urgentAlert.count({ where: { organizationId, readAt: null } });
 }

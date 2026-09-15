@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { getGmailClientForAccount } from "@/lib/gmail/client";
 
 /**
@@ -8,10 +9,13 @@ import { getGmailClientForAccount } from "@/lib/gmail/client";
  * gmailMessageId + gmailAttachmentId guardados al importar.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ attachmentId: string }> }) {
+  const { organizationId } = await requireSession();
   const { attachmentId } = await params;
 
-  const attachment = await prisma.emailAttachment.findUnique({
-    where: { id: attachmentId },
+  // EmailAttachment no lleva organizationId directo — ownership vía el email
+  // al que pertenece.
+  const attachment = await prisma.emailAttachment.findFirst({
+    where: { id: attachmentId, email: { organizationId } },
     include: { email: { include: { mailAccount: true } } },
   });
 

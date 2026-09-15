@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RescueActions } from "@/components/rescue/rescue-actions";
+import { requireSession } from "@/lib/auth/session";
 import { getCurrentServiceLevel } from "@/lib/priority/current";
 import { getRescuePlan } from "@/lib/priority/rescue";
 import { getUserTimeZone } from "@/lib/settings";
@@ -10,7 +11,8 @@ import { formatShortDateTime } from "@/lib/format/date";
 export const dynamic = "force-dynamic";
 
 export default async function RescuePage() {
-  const { features } = await getCurrentServiceLevel();
+  const { organizationId } = await requireSession();
+  const { features } = await getCurrentServiceLevel(organizationId);
 
   if (!features.rescueMode) {
     return (
@@ -23,7 +25,7 @@ export default async function RescuePage() {
     );
   }
 
-  const [commitments, tz] = await Promise.all([getRescuePlan(), getUserTimeZone()]);
+  const [commitments, tz] = await Promise.all([getRescuePlan(organizationId), getUserTimeZone(organizationId)]);
   const overdueCount = commitments.filter((c) => c.status === "OVERDUE").length;
 
   return (

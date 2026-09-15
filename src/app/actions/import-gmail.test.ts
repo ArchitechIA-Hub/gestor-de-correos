@@ -10,7 +10,16 @@ vi.mock("@/lib/gmail/client", () => ({
 }));
 
 import { prisma } from "@/lib/db/prisma";
-import { importGmailEmails } from "./import-gmail";
+import { importGmailEmailsForAccount as importGmailEmailsUnbound } from "@/lib/gmail/import-service";
+
+let organizationId: string;
+
+// El Server Action (src/app/actions/import-gmail.ts) exige sesión real vía
+// requireSession() — estos tests ejercitan la lógica de negocio directo
+// contra la función de lib, igual que scan.test.ts.
+function importGmailEmails(mailAccountId: string, limit?: number) {
+  return importGmailEmailsUnbound(organizationId, mailAccountId, limit);
+}
 
 async function resetDb() {
   await prisma.whatsAppNotification.deleteMany();
@@ -29,6 +38,7 @@ async function resetDb() {
 async function seedGmailAccount() {
   return prisma.mailAccount.create({
     data: {
+      organizationId,
       emailAddress: "real@gmail.com",
       label: "Gmail real",
       provider: "gmail",
@@ -39,6 +49,8 @@ async function seedGmailAccount() {
 
 beforeEach(async () => {
   await resetDb();
+  const organization = await prisma.organization.create({ data: { name: "Organización de prueba" } });
+  organizationId = organization.id;
   listMock.mockReset();
   listMock.mockResolvedValue({ data: { messages: [] } });
 });
@@ -82,7 +94,7 @@ describe("importGmailEmails", () => {
 
   it("rechaza una cuenta que no está conectada a Gmail", async () => {
     const account = await prisma.mailAccount.create({
-      data: { emailAddress: "mock@test.local", label: "Cuenta mock" },
+      data: { organizationId, emailAddress: "mock@test.local", label: "Cuenta mock" },
     });
 
     await expect(importGmailEmails(account.id)).rejects.toThrow(

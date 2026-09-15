@@ -12,10 +12,14 @@ const EXTRA_FLAG_KEYS = [
 
 export type ExtraFlagKey = (typeof EXTRA_FLAG_KEYS)[number];
 
-export async function getExtraConfig() {
-  const config = await prisma.extraConfig.findFirst();
+/**
+ * Antes era una fila única global. Ahora una fila por organización —
+ * `organizationId` viene siempre de la sesión, nunca opcional.
+ */
+export async function getExtraConfig(organizationId: string) {
+  const config = await prisma.extraConfig.findFirst({ where: { organizationId } });
   if (config) return config;
-  return prisma.extraConfig.create({ data: {} });
+  return prisma.extraConfig.create({ data: { organizationId } });
 }
 
 export function countActiveExtras(config: ExtraConfigModel): number {

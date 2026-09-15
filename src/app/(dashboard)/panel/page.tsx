@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { getExtraConfig, countActiveExtras, shouldConsolidatePanel } from "@/lib/extras";
 import { getAnalyticsSnapshot } from "@/lib/analytics/metrics";
 import { getUpcomingCalendarEvents } from "@/lib/calendar";
@@ -13,7 +14,8 @@ import { formatShortDateTime } from "@/lib/format/date";
 export const dynamic = "force-dynamic";
 
 export default async function PanelPage() {
-  const config = await getExtraConfig();
+  const { organizationId } = await requireSession();
+  const config = await getExtraConfig(organizationId);
   const activeCount = countActiveExtras(config);
   const consolidated = shouldConsolidatePanel(config);
 
@@ -34,23 +36,23 @@ export default async function PanelPage() {
 
   const [urgentEmails, vipUnanswered, analytics, calendarEvents, whatsappNotifications] = await Promise.all([
     prisma.email.findMany({
-      where: { isUrgent: true, status: "CLASSIFIED" },
+      where: { organizationId, isUrgent: true, status: "CLASSIFIED" },
       include: { sender: true, commitments: { orderBy: { dueAt: "asc" }, take: 1 } },
       orderBy: { priorityScore: "desc" },
       take: 10,
     }),
     prisma.email.findMany({
-      where: { sender: { isVip: true }, status: { not: "ARCHIVED" }, respondedAt: null },
+      where: { organizationId, sender: { isVip: true }, status: { not: "ARCHIVED" }, respondedAt: null },
       include: { sender: true },
       orderBy: { receivedAt: "asc" },
       take: 10,
     }),
-    config.analyticsEnabled ? getAnalyticsSnapshot() : Promise.resolve(null),
-    config.calendarEnabled ? getUpcomingCalendarEvents() : Promise.resolve(null),
-    config.whatsappEnabled ? getRecentWhatsAppNotifications() : Promise.resolve(null),
+    config.analyticsEnabled ? getAnalyticsSnapshot(organizationId) : Promise.resolve(null),
+    config.calendarEnabled ? getUpcomingCalendarEvents(organizationId) : Promise.resolve(null),
+    config.whatsappEnabled ? getRecentWhatsAppNotifications(organizationId) : Promise.resolve(null),
   ]);
 
-  const tz = await getUserTimeZone();
+  const tz = await getUserTimeZone(organizationId);
 
   return (
     <div className="flex flex-col gap-8">

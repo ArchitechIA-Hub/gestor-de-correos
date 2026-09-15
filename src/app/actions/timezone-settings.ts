@@ -2,15 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { requireSession } from "@/lib/auth/session";
 import { getAppSettings } from "@/lib/settings";
 import { isValidTimeZone } from "@/lib/format/timezone";
 
 export async function setUserTimeZone(timeZone: string) {
+  const { organizationId } = await requireSession();
   if (!isValidTimeZone(timeZone)) {
     throw new Error("Zona horaria inválida.");
   }
 
-  const settings = await getAppSettings();
+  const settings = await getAppSettings(organizationId);
   const updated = await prisma.appSettings.update({
     where: { id: settings.id },
     data: { timeZone },
