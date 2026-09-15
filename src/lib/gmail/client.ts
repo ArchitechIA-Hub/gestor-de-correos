@@ -15,13 +15,16 @@ function getOAuthClient() {
 /**
  * URL de consentimiento de Google. `prompt: "consent"` fuerza que Google
  * reemita un refresh_token también en reconexiones (por defecto solo lo
- * entrega la primera vez que el usuario autoriza la app).
+ * entrega la primera vez que el usuario autoriza la app). `state` es el JWT
+ * firmado de `src/lib/gmail/oauth-state.ts` (protección CSRF, Fase 5) — Google
+ * lo devuelve intacto al callback.
  */
-export function getAuthUrl(): string {
+export function getAuthUrl(state: string): string {
   return getOAuthClient().generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
     scope: [GMAIL_READONLY_SCOPE, GMAIL_SEND_SCOPE],
+    state,
   });
 }
 
