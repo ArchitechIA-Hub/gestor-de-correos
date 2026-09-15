@@ -17,6 +17,7 @@ const GMAIL_ERROR_MESSAGES: Record<string, string> = {
   access_denied: "Cancelaste el consentimiento en Google.",
   state_invalido: "El enlace de conexión expiró o no es válido — vuelve a hacer clic en \"Conectar con Google\".",
   cuenta_ya_conectada: "Esa cuenta de Gmail ya está conectada a otra organización.",
+  config_cifrado: "Falta configuración del servidor (ENCRYPTION_KEY) para guardar la cuenta de forma segura. Avisa al administrador.",
 };
 
 export default async function MailAccountsSettingsPage({

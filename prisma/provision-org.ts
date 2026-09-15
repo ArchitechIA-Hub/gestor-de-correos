@@ -44,7 +44,7 @@ async function main() {
   }
 
   const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
 
   const { organization, user } = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({ data: { name: orgName } });

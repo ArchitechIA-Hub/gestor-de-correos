@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import type { MailAccountModel } from "@/generated/prisma/models";
+import { decrypt } from "@/lib/crypto/encryption";
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
@@ -38,13 +39,21 @@ export async function exchangeCodeForTokens(code: string) {
  * Cliente Gmail autenticado para una cuenta ya conectada. Usa el refresh
  * token guardado para obtener access tokens nuevos automáticamente
  * (googleapis lo maneja internamente en cada llamada).
+ *
+ * `MailAccount.googleRefreshToken` se guarda cifrado en reposo (AES-256-GCM,
+ * ver `src/lib/crypto/encryption.ts`) — este es el único punto del sistema
+ * que necesita el valor real para llamar a la API de Google, así que es
+ * también el único punto que lo descifra. `decrypt()` reconoce un valor en
+ * texto plano legado (cuentas conectadas antes de activar `ENCRYPTION_KEY`)
+ * y lo devuelve tal cual, sin romper esas cuentas mientras se coordina la
+ * migración real.
  */
 export function getGmailClientForAccount(mailAccount: Pick<MailAccountModel, "googleRefreshToken">) {
   if (!mailAccount.googleRefreshToken) {
     throw new Error("Esta cuenta no tiene un refresh token de Google guardado.");
   }
   const auth = getOAuthClient();
-  auth.setCredentials({ refresh_token: mailAccount.googleRefreshToken });
+  auth.setCredentials({ refresh_token: decrypt(mailAccount.googleRefreshToken) });
   return google.gmail({ version: "v1", auth });
 }
 
