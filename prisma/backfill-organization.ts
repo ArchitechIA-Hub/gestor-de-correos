@@ -44,7 +44,7 @@ async function main() {
   const userEmail = parseArg("--user-email") ?? "dmmp010@gmail.com";
   const userName = parseArg("--user-name") ?? "Daniel Martínez";
   const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
 
   const { organization, user } = await prisma.$transaction(async (tx) => {
     const organization = await tx.organization.create({ data: { name: orgName } });

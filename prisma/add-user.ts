@@ -49,7 +49,7 @@ async function main() {
   }
 
   const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 10);
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
   const user = await prisma.user.create({ data: { organizationId: orgId, email: userEmail, name: userName, passwordHash } });
 
   console.log(`Usuario añadido a "${organization.name}".`);
