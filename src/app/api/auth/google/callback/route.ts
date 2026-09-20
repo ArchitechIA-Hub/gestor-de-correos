@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
   const account = await prisma.mailAccount.upsert({
     where: { emailAddress },
     create: {
-      organizationId,
+      organization: { connect: { id: organizationId } },
       emailAddress,
       label: emailAddress,
       provider: "gmail",

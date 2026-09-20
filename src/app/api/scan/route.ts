@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
     await prisma.scanCycleLog.create({
       data: {
-        organizationId,
+        organization: { connect: { id: organizationId } },
         emailsImported: imported,
         emailsScanned: scanResult.scanned,
         inputTokens: scanResult.inputTokens,
